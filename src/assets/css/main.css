@@ -1,0 +1,210 @@
+@import "./webfont.css";
+@import "tailwindcss";
+
+@theme {
+    /* Screens */
+    --breakpoint-macbook: 1440px;
+    --breakpoint-laptop: 1599px;
+    --breakpoint-desktop: 1600px;
+
+    /* Colors */
+    --color-inherit: inherit;
+    --color-transparent: transparent;
+    --color-current: currentColor;
+    --color-dark: #2F3448;
+    --color-mid: #565865;
+    --color-dark-light: #696778;
+    --color-light: #9D9FAC;
+    --color-lighter: #F3F3F3;
+    --color-white: #FFFFFF;
+    --color-primary: #1299A7;
+    --color-primary-dark: #087c88;
+    --color-secondary: #4B2965;
+    --color-teal: #1299A7;
+    --color-teal-mid: #CEF4F8;
+    --color-teal-light: #EAFDFF;
+    --color-teal-lighter: #E4FDFF;
+    --color-teal-extra-lighter: #F8FEFF;
+    --color-purple: #4B2965;
+    --color-purple-light: #F5F0FF;
+    --color-placeholder: #9D9FAC;
+    --color-orange: #F87010;
+    --color-orange-light: #FEF0E7;
+    --color-orange-lighter: #FFF4E5;
+    --color-yellow-light: #FFC217;
+    --color-yellow-dark: #FFAF40;
+    --color-green: #00832C;
+    --color-green-lighter: #eaffee;
+    --color-green-light: #D5FAE1;
+    --color-blue: #276EF2;
+    --color-blue-light: #F1F5FE;
+    --color-mint-light: #E7F9CD;
+    --color-mint-green: #D1EAAE;
+    --color-pink: #FBB3B3;
+    --color-pink-light: #FDEBFB;
+    --color-violet: #A3A1FF;
+    --color-tame-teal: #A8E7EE;
+    --color-sky-light: #C9EEFE;
+    --color-skyblue: #B3DCFD;
+    --color-background: #FAFAFA;
+    --color-artboard: #F5F4F6;
+    --color-grey: #D8D8D8;
+    --color-danger: #FF0003;
+    --color-danger-lighter: #ffe0e0;
+    --color-action: #FF0003;
+    --color-success: #75DA89;
+    --color-info: #356FF4;
+    --color-warning: #ffa32c;
+    --color-warning-lighter: #fff0d8;
+    --color-error: #F83939;
+    --color-yellow-50: #FFF9E8;
+    --color-yellow-60: #FDEDC1;
+    --color-yellow-70: #FAD56F;
+    --color-yellow-80: #FCC93D;
+    --color-yellow-90: #F8B906;
+    --color-yellow-100: #E6AC04;
+    --color-violet-50: #D3D4F4;
+    --color-violet-60: #CCCBFE;
+    --color-violet-70: #C1BFFD;
+    --color-violet-80: #A3A0FD;
+    --color-violet-90: #918EFC;
+    --color-violet-100: #7D7FE8;
+    --color-violet-light: #E0E6FE;
+
+    /* Font sizes */
+    --font-size-b1: 18px;
+    --font-size-b2: 16px;
+    --font-size-b3: 15px;
+    --font-size-b4: 14px;
+    --font-size-b5: 13px;
+    --font-size-b6: 12px;
+    --font-size-h1: 36px;
+    --font-size-h2: 24px;
+    --font-size-h3: 18px;
+    --font-size-h4: 16px;
+    --font-size-h5: 15px;
+    --font-size-h6: 14px;
+
+    /* Border radius */
+    --border-radius-none: 0px;
+    --border-radius-xsm: 4px;
+    --border-radius-sm: 6px;
+    --border-radius-default: 8px;
+    --border-radius-md: 10px;
+    --border-radius-lg: 12px;
+    --border-radius-full: 50%;
+}
+
+/* Add default font-family */
+@layer base {
+    html {
+        font-family: 'Hind Vadodara', sans-serif;
+    }
+}
+
+/* -- Global -- */
+html,
+body {
+    &::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background-color: #fcfbfd;
+        border-radius: 5px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: #eeecef;
+        border-radius: 14px;
+    }
+}
+
+/* -- Autocomplete CSS -- */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset;
+    box-shadow: 0 0 0 1000px #fff inset;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+button {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+}
+
+.custom-scrollbar {
+    &::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background-color: #fcfbfd;
+        border-radius: 5px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: #eeecef;
+        border-radius: 14px;
+    }
+}
+
+.custom-filter-scrollbar {
+    &::-webkit-scrollbar {
+        width: 3px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: #fff;
+        border-radius: 5px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: #f5f4f6;
+        border-radius: 14px;
+    }
+}
+
+/* -- Datepicker -- */
+.dp__theme_light {
+    --dp-background-color: #fff;
+    --dp-text-color: #565865;
+    --dp-hover-color: #f3f3f3;
+    --dp-hover-text-color: #212121;
+    --dp-hover-icon-color: #959595;
+    --dp-primary-color: #1299A7;
+    --dp-primary-disabled-color: #6bacea;
+    --dp-primary-text-color: #f8f5f5;
+    --dp-secondary-color: #c0c4cc;
+    --dp-border-color: #ddd;
+    --dp-menu-border-color: #ddd;
+    --dp-border-color-hover: #aaaeb7;
+    --dp-disabled-color: #f6f6f6;
+    --dp-scroll-bar-background: #f3f3f3;
+    --dp-scroll-bar-color: #959595;
+    --dp-success-color: #76d275;
+    --dp-success-color-disabled: #a3d9b1;
+    --dp-icon-color: #959595;
+    --dp-danger-color: #ff6f60;
+    --dp-marker-color: #ff6f60;
+    --dp-tooltip-color: #fafafa;
+    --dp-disabled-color-text: #8e8e8e;
+    --dp-highlight-color: rgb(25 118 210 / 10%);
+    --dp-range-between-dates-background-color: var(--dp-hover-color, #f3f3f3);
+    --dp-range-between-dates-text-color: var(--dp-hover-text-color, #212121);
+    --dp-range-between-border-color: var(--dp-hover-color, #f3f3f3);
+    --dp-font-size: 14px;
+    --dp-font-family: 'Hind Vadodara', sans-serif;
+}
