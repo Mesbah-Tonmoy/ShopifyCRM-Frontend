@@ -8,17 +8,10 @@ const roles = ref<Role[]>([]);
 const allPermissions = ref<Permission[]>([]);
 const loading = ref(false);
 const saving = ref(false);
-const isCreating = ref(false);
-const showAddModal = ref(false);
 const showPermissionModal = ref(false);
 const isCreatingPermission = ref(false);
 const selectedRoleId = ref<number | null>(null);
 const selectedPermissionIds = ref<number[]>([]);
-
-const newRole = ref({
-  name: '',
-  description: ''
-});
 
 const newPermission = ref({
   name: '',
@@ -91,6 +84,7 @@ const permissionGroups = computed<Record<string, { title: string, permissions: P
     roles: { title: 'Roles', permissions: [] },
     permissions: { title: 'Permission Groups', permissions: [] },
     users: { title: 'Users', permissions: [] },
+    apps: { title: 'Apps', permissions: [] },
     installations: { title: 'Installations', permissions: [] },
     email_templates: { title: 'Email Templates', permissions: [] },
   };
@@ -143,39 +137,6 @@ const savePermissions = async () => {
     Swal.fire('Error', 'Failed to update permissions', 'error');
   } finally {
     saving.value = false;
-  }
-};
-
-const handleCreateRole = async () => {
-  if (!newRole.value.name) return;
-  
-  isCreating.value = true;
-  try {
-    const response = await aclService.createRole({
-      name: newRole.value.name,
-      description: newRole.value.description,
-      slug: newRole.value.name.toLowerCase().replace(/\s+/g, '-'),
-      permissions: []
-    });
-
-    if (response.success) {
-      roles.value.push(response.data);
-      selectRole(response.data);
-      showAddModal.value = false;
-      newRole.value = { name: '', description: '' };
-      
-      Swal.fire({
-        title: 'Success',
-        text: 'Role created successfully',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
-      });
-    }
-  } catch (error) {
-    Swal.fire('Error', 'Failed to create role', 'error');
-  } finally {
-    isCreating.value = false;
   }
 };
 
@@ -411,6 +372,35 @@ onMounted(fetchInitialData);
                 </label>
               </div>
             </div>
+
+            <!-- Group: Apps -->
+            <div class="space-y-4" v-if="permissionGroups.apps">
+              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.apps.title }}</h3>
+              <div class="space-y-3">
+                <label class="flex items-center group cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
+                    :checked="isGroupSelected(permissionGroups.apps.permissions)"
+                    @change="toggleGroup(permissionGroups.apps.permissions)"
+                  >
+                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
+                </label>
+                <label 
+                  v-for="perm in permissionGroups.apps.permissions" 
+                  :key="perm.id" 
+                  class="flex items-center group cursor-pointer"
+                >
+                  <input 
+                    type="checkbox" 
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
+                    :checked="isPermissionSelected(perm.id)"
+                    @change="togglePermission(perm.id)"
+                  >
+                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -424,63 +414,6 @@ onMounted(fetchInitialData);
             <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
             {{ saving ? 'Saving Changes...' : 'Save Permissions' }}
           </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Role Modal -->
-    <div v-if="showAddModal" class="fixed inset-0 z-50 overflow-y-auto">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="fixed inset-0 bg-gray-500/25 backdrop-blur-sm transition-opacity" @click="showAddModal = false"></div>
-
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-md w-full overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-            <h3 class="text-lg font-bold text-gray-900">Add New Role</h3>
-            <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
-              <CloseIcon class="w-6 h-6" />
-            </button>
-          </div>
-
-          <form @submit.prevent="handleCreateRole" class="p-6 space-y-5">
-            <div class="space-y-1.5">
-              <label class="block text-sm font-bold text-gray-700">Role Name</label>
-              <input
-                v-model="newRole.name"
-                type="text"
-                required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400"
-                placeholder="e.g. Sales Manager"
-              />
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="block text-sm font-bold text-gray-700">Description</label>
-              <textarea
-                v-model="newRole.description"
-                rows="3"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400 resize-none"
-                placeholder="Briefly describe what this role can do..."
-              ></textarea>
-            </div>
-
-            <div class="pt-2 flex justify-end gap-3">
-              <button 
-                type="button"
-                @click="showAddModal = false" 
-                class="px-5 py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="isCreating || !newRole.name"
-                class="px-6 py-2 bg-teal text-white rounded-lg text-sm font-bold hover:bg-teal-dark transition-all shadow-sm hover:shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
-              >
-                <LoadingIcon v-if="isCreating" size="sm" color-class="text-white" />
-                {{ isCreating ? 'Creating...' : 'Create Role' }}
-              </button>
-            </div>
-          </form>
         </div>
       </div>
     </div>

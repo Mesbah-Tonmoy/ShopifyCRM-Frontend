@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import Swal from 'sweetalert2';
 import { emailTemplateService, type EmailTemplate as ApiEmailTemplate } from '@/services/emailTemplateService';
+import { useAuthStore } from '@/stores/auth';
 import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
@@ -22,6 +23,7 @@ const previewTemplate = ref<EmailTemplate | null>(null);
 const selectedAppId = ref<number | null>(null);
 const selectedTemplateType = ref<string | null>(null);
 const searchQuery = ref('');
+const authStore = useAuthStore();
 
 onMounted(() => {
   fetchTemplates();
@@ -298,6 +300,7 @@ const saveTemplate = async () => {
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 <div class="flex items-center gap-3">
                   <button
+                    v-if="authStore.hasPermission('email_templates.edit')"
                     @click="openEditModal(template)"
                       class="text-teal hover:text-teal-dark transition-colors"
                     title="Edit"

@@ -1,10 +1,27 @@
 // src/types/index.ts
 
+export interface Permission {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  permissions?: Permission[];
+}
+
 export interface User {
   id: number;
   name: string;
   email: string;
+  image?: string;
   email_verified_at: string | null;
+  roles?: Role[];
   created_at: string;
   updated_at: string;
 }

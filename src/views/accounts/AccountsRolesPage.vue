@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { aclService, type Role, type Permission } from '@/services/aclService';
-import { EditIcon, DeleteIcon } from '@/components/icons';
+import { EditIcon, DeleteIcon, PlusIcon, CloseIcon } from '@/components/icons';
 import Swal from 'sweetalert2';
 
 const roles = ref<Role[]>([]);
@@ -125,9 +125,7 @@ const deleteRole = async (id: number) => {
         <p class="text-b4 text-mid mt-1">Manage user roles and their associated permissions</p>
       </div>
       <button @click="openAddModal" class="bg-teal text-white px-4 py-2.5 rounded-lg font-medium hover:bg-teal-dark transition-colors flex items-center cursor-pointer">
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
+        <PlusIcon class="mr-2" />
         Add Role
       </button>
     </div>
@@ -171,9 +169,7 @@ const deleteRole = async (id: number) => {
         <div class="p-6 border-b border-gray-100 flex justify-between items-center">
           <h2 class="text-xl font-bold text-dark">{{ isEditing ? 'Edit Role' : 'Create New Role' }}</h2>
           <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <CloseIcon size="lg" />
           </button>
         </div>
 

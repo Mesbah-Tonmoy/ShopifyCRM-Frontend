@@ -56,14 +56,17 @@ const closeUserMenu = () => {
           @click="toggleUserMenu"
           class="flex items-center space-x-3 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors"
         >
-          <div class="w-8 h-8 bg-teal rounded-full flex items-center justify-center">
-            <span class="text-white text-sm font-semibold">
+          <div class="w-8 h-8 rounded-full bg-teal flex items-center justify-center overflow-hidden">
+            <template v-if="authStore.user?.image">
+              <img :src="authStore.user.image" :alt="authStore.user.name" class="w-full h-full object-cover">
+            </template>
+            <span v-else class="text-white text-sm font-semibold">
               {{ authStore.user?.name?.charAt(0)?.toUpperCase() || 'U' }}
             </span>
           </div>
           <div class="text-left hidden sm:block">
             <div class="text-sm font-medium text-gray-900">{{ authStore.user?.name || 'User' }}</div>
-            <div class="text-xs text-gray-500">{{ authStore.user?.email || '' }}</div>
+            <div class="text-xs text-gray-500">{{ authStore.user?.email || 'Loading...' }}</div>
           </div>
           <svg 
             class="w-4 h-4 text-gray-500 transition-transform"

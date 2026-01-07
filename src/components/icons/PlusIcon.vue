@@ -5,7 +5,7 @@
     viewBox="0 0 24 24" 
     stroke-width="1.5" 
     stroke="currentColor" 
-    :class="[sizeClass, customClass]"
+    :class="classNames"
   >
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
   </svg>
@@ -15,15 +15,13 @@ import { computed } from 'vue';
 
 interface Props {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-  class?: string;
+  class?: string | string[] | Record<string, boolean>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: 'md',
   class: ''
 });
-
-const customClass = props.class;
 
 const sizeClass = computed(() => {
   const sizes = {
@@ -34,5 +32,17 @@ const sizeClass = computed(() => {
     'xl': 'w-8 h-8'
   };
   return sizes[props.size];
+});
+
+const classNames = computed(() => {
+  const classes: (string | Record<string, boolean>)[] = [sizeClass.value];
+  
+  if (Array.isArray(props.class)) {
+    classes.push(...props.class);
+  } else if (props.class) {
+    classes.push(props.class);
+  }
+  
+  return classes;
 });
 </script>

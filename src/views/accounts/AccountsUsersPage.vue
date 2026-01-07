@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { aclService, type User, type Role } from '@/services/aclService';
-import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon } from '@/components/icons';
+import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon, CloseIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import Swal from 'sweetalert2';
 
@@ -269,9 +269,7 @@ const deleteUser = async (id: number) => {
         <div class="flex justify-between items-center mb-6">
           <h2 class="text-xl font-bold text-dark">{{ isEditing ? 'Edit User' : 'Add New User' }}</h2>
           <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <CloseIcon size="lg" />
           </button>
         </div>
 

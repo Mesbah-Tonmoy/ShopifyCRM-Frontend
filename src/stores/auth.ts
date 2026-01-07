@@ -18,12 +18,12 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null;
 
       const response = await apiService.post<AuthResponse>('/login', credentials, false);
-      
+
       token.value = response.data.token;
       user.value = response.data.user;
-      
+
       localStorage.setItem('token', response.data.token);
-      
+
       return true;
     } catch (err: unknown) {
       error.value = (err as Error).message || 'Login failed';
@@ -39,12 +39,12 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null;
 
       const response = await apiService.post<AuthResponse>('/register', data, false);
-      
+
       token.value = response.data.token;
       user.value = response.data.user;
-      
+
       localStorage.setItem('token', response.data.token);
-      
+
       return true;
     } catch (err: unknown) {
       error.value = (err as Error).message || 'Registration failed';
@@ -83,6 +83,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  const hasPermission = (permissionSlug: string): boolean => {
+    if (!user.value || !user.value.roles) return false;
+
+    return user.value.roles.some(role =>
+      role.permissions?.some(permission => permission.slug === permissionSlug)
+    );
+  };
+
   return {
     user,
     token,
@@ -94,5 +102,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchUser,
     checkAuth,
+    hasPermission,
   };
 });

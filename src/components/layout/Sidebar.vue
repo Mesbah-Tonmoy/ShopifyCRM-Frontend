@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useAppsStore } from '@/stores/apps';
+import { useAuthStore } from '@/stores/auth';
+import ChevronDown from '@/components/icons/ChevronDown.vue';
+
+const authStore = useAuthStore();
 
 const props = defineProps<{
   collapsed: boolean;
@@ -73,6 +77,12 @@ const isInstallationsActive = computed(() => {
 
 const navigationItems = [
   {
+    name: 'Apps',
+    route: 'apps',
+    icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
+    permission: 'apps.view',
+  },
+  {
     name: 'Pricing Plan',
     route: 'pricing-plan',
     icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -81,14 +91,23 @@ const navigationItems = [
     name: 'Email Templates',
     route: 'email-templates',
     icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+    permission: 'email_templates.view',
   },
 ];
 
 const accountsSubMenu = [
-  { name: 'Users', route: 'accounts-users' },
-  { name: 'Permissions', route: 'accounts-permissions' },
-  { name: 'Roles', route: 'accounts-roles' },
+  { name: 'Users', route: 'accounts-users', permission: 'users.view' },
+  { name: 'Permissions', route: 'accounts-permissions', permission: 'permissions.view' },
+  { name: 'Roles', route: 'accounts-roles', permission: 'roles.view' },
 ];
+
+const filteredNavigationItems = computed(() => {
+  return navigationItems.filter(item => !item.permission || authStore.hasPermission(item.permission));
+});
+
+const filteredAccountsSubMenu = computed(() => {
+  return accountsSubMenu.filter(item => !item.permission || authStore.hasPermission(item.permission));
+});
 </script>
 
 <template>
@@ -128,7 +147,7 @@ const accountsSubMenu = [
     <nav class="flex-1 overflow-y-auto py-4 custom-scrollbar">
       <div class="px-3 space-y-1">
         <!-- Installation List with Submenu -->
-        <div>
+        <div v-if="authStore.hasPermission('installations.view')">
           <button
             @click="toggleInstallationsMenu"
             :class="[
@@ -157,19 +176,14 @@ const accountsSubMenu = [
                 Installation List
               </span>
             </div>
-            <svg 
+            <ChevronDown 
               v-if="!isCollapsed"
+              size="sm"
               :class="[
-                'w-4 h-4 transition-transform duration-200',
+                'transition-transform duration-200',
                 installationsExpanded ? 'rotate-180' : '',
                 isInstallationsActive && !installationsExpanded ? 'text-white' : 'text-gray-500 group-hover:text-teal'
-              ]"
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
+              ]" />
           </button>
 
           <!-- Submenu (All Installations + Apps) -->
@@ -207,7 +221,7 @@ const accountsSubMenu = [
 
         <!-- Regular Navigation Items -->
         <router-link
-          v-for="item in navigationItems"
+          v-for="item in filteredNavigationItems"
           :key="item.route"
           :to="{ name: item.route }"
           :class="[
@@ -237,7 +251,7 @@ const accountsSubMenu = [
         </router-link>
 
         <!-- Accounts Menu with Submenu -->
-        <div>
+        <div v-if="filteredAccountsSubMenu.length > 0">
           <button
             @click="toggleAccountsMenu"
             :class="[
@@ -266,19 +280,14 @@ const accountsSubMenu = [
                 Accounts
               </span>
             </div>
-            <svg 
+            <ChevronDown 
               v-if="!isCollapsed"
+              size="sm"
               :class="[
-                'w-4 h-4 transition-transform duration-200',
+                'transition-transform duration-200',
                 accountsExpanded ? 'rotate-180' : '',
                 isAccountsActive ? 'text-white' : 'text-gray-500 group-hover:text-teal'
-              ]"
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
+              ]" />
           </button>
 
           <!-- Submenu -->
@@ -287,7 +296,7 @@ const accountsSubMenu = [
             class="mt-1 ml-4 pl-4 border-l border-gray-300 space-y-1 cursor-pointer"
           >
             <router-link
-              v-for="subItem in accountsSubMenu"
+              v-for="subItem in filteredAccountsSubMenu"
               :key="subItem.route"
               :to="{ name: subItem.route }"
               :class="[

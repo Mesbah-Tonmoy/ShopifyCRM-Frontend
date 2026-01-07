@@ -105,6 +105,25 @@ export const useAppsStore = defineStore('apps', () => {
     }
   };
 
+  const resyncApp = async (id: number) => {
+    try {
+      loading.value = true;
+      error.value = null;
+
+      const response = await apiService.post<App>(`/apps/${id}/resync`, {});
+      const index = apps.value.findIndex(app => app.id === id);
+      if (index !== -1) {
+        apps.value[index] = response.data;
+      }
+      return true;
+    } catch (err: unknown) {
+      error.value = (err as Error).message || 'Failed to resync app';
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const connectApp = async (appUrl: string) => {
     try {
       loading.value = true;
@@ -134,6 +153,7 @@ export const useAppsStore = defineStore('apps', () => {
     createApp,
     updateApp,
     deleteApp,
+    resyncApp,
     connectApp,
   };
 });
