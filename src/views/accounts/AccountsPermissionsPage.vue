@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { aclService, type Permission, type Role } from '@/services/aclService';
+import { useAuthStore } from '@/stores/auth';
 import Swal from 'sweetalert2';
 import { CloseIcon, PlusIcon, LoadingIcon } from '@/components/icons';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 
 const roles = ref<Role[]>([]);
 const allPermissions = ref<Permission[]>([]);
@@ -11,7 +13,14 @@ const saving = ref(false);
 const showPermissionModal = ref(false);
 const isCreatingPermission = ref(false);
 const selectedRoleId = ref<number | null>(null);
+const authStore = useAuthStore();
 const selectedPermissionIds = ref<number[]>([]);
+const originalPermissionIds = ref<number[]>([]);
+
+const hasChanges = computed(() => {
+  if (selectedPermissionIds.value.length !== originalPermissionIds.value.length) return true;
+  return !selectedPermissionIds.value.every(id => originalPermissionIds.value.includes(id));
+});
 
 const newPermission = ref({
   name: '',
@@ -48,6 +57,7 @@ const fetchInitialData = async () => {
 const selectRole = (role: Role) => {
   selectedRoleId.value = role.id;
   selectedPermissionIds.value = role.permissions?.map(p => p.id) || [];
+  originalPermissionIds.value = [...selectedPermissionIds.value];
 };
 
 const isPermissionSelected = (id: number) => {
@@ -87,6 +97,7 @@ const permissionGroups = computed<Record<string, { title: string, permissions: P
     apps: { title: 'Apps', permissions: [] },
     installations: { title: 'Installations', permissions: [] },
     email_templates: { title: 'Email Templates', permissions: [] },
+    pricing_plans: { title: 'Pricing Plans', permissions: [] },
   };
 
   allPermissions.value.forEach(p => {
@@ -132,6 +143,7 @@ const savePermissions = async () => {
           selectedPermissionIds.value.includes(p.id)
         );
       }
+      originalPermissionIds.value = [...selectedPermissionIds.value];
     }
   } catch (error) {
     Swal.fire('Error', 'Failed to update permissions', 'error');
@@ -201,8 +213,9 @@ onMounted(fetchInitialData);
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button 
+            v-if="authStore.hasPermission('permissions.add')"
             @click="showPermissionModal = true"
-            class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+            class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
           >
             <PlusIcon size="sm" />
             Add Permission
@@ -212,9 +225,31 @@ onMounted(fetchInitialData);
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-8">
-      <div v-if="loading" class="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
-        <LoadingIcon size="lg" color-class="text-teal" />
-        <span class="text-sm">Loading Permission Matrix...</span>
+      <div v-if="loading" class="space-y-12">
+        <!-- Skeleton Accounts Section -->
+        <div class="space-y-6">
+          <SkeletonLoader width="120px" height="28px" custom-class="border-l-4 border-teal pl-4" />
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+            <div v-for="i in 3" :key="i" class="space-y-4">
+              <SkeletonLoader width="80px" height="16px" />
+              <div class="space-y-3">
+                <SkeletonLoader v-for="j in 5" :key="j" width="100%" height="20px" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Skeleton Data Section -->
+        <div class="space-y-6 pt-6 border-t border-gray-100">
+          <SkeletonLoader width="80px" height="28px" custom-class="border-l-4 border-teal pl-4" />
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+            <div v-for="i in 3" :key="i" class="space-y-4">
+              <SkeletonLoader width="100px" height="16px" />
+              <div class="space-y-3">
+                <SkeletonLoader v-for="j in 4" :key="j" width="100%" height="20px" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else class="space-y-12">
@@ -401,15 +436,45 @@ onMounted(fetchInitialData);
                 </label>
               </div>
             </div>
+
+            <!-- Group: Pricing Plans -->
+            <div class="space-y-4" v-if="permissionGroups.pricing_plans">
+              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.pricing_plans.title }}</h3>
+              <div class="space-y-3">
+                <label class="flex items-center group cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
+                    :checked="isGroupSelected(permissionGroups.pricing_plans.permissions)"
+                    @change="toggleGroup(permissionGroups.pricing_plans.permissions)"
+                  >
+                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
+                </label>
+                <label 
+                  v-for="perm in permissionGroups.pricing_plans.permissions" 
+                  :key="perm.id" 
+                  class="flex items-center group cursor-pointer"
+                >
+                  <input 
+                    type="checkbox" 
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
+                    :checked="isPermissionSelected(perm.id)"
+                    @change="togglePermission(perm.id)"
+                  >
+                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Save Button Bar -->
         <div class="flex justify-end pt-8 border-t border-gray-100">
           <button 
+            v-if="authStore.hasPermission('permissions.edit')"
             @click="savePermissions"
-            :disabled="saving || !selectedRoleId"
-            class="bg-teal text-white px-8 py-2.5 rounded-lg font-bold hover:bg-teal-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+            :disabled="saving || !selectedRoleId || !hasChanges"
+            class="bg-teal text-white px-8 py-2.5 rounded-lg font-bold hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
           >
             <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
             {{ saving ? 'Saving Changes...' : 'Save Permissions' }}
@@ -419,22 +484,23 @@ onMounted(fetchInitialData);
     </div>
 
     <!-- Add Permission Modal -->
-    <div v-if="showPermissionModal" class="fixed inset-0 z-50 overflow-y-auto">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="fixed inset-0 bg-gray-500/25 backdrop-blur-sm transition-opacity" @click="showPermissionModal = false"></div>
+    <div v-if="showPermissionModal" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showPermissionModal = false"></div>
 
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-md w-full overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
             <h3 class="text-lg font-bold text-gray-900">Add New Permission</h3>
             <button @click="showPermissionModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
-              <CloseIcon class="w-6 h-6" />
+              <CloseIcon size="lg" />
             </button>
           </div>
 
           <form @submit.prevent="handleCreatePermission" class="p-6 space-y-5">
             <div class="space-y-1.5">
-              <label class="block text-sm font-bold text-gray-700">Permission Name</label>
+              <label for="permName" class="block text-sm font-bold text-gray-700 cursor-pointer">Permission Name</label>
               <input
+                id="permName"
+                name="name"
                 v-model="newPermission.name"
                 type="text"
                 required
@@ -444,8 +510,10 @@ onMounted(fetchInitialData);
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-sm font-bold text-gray-700">Permission Slug</label>
+              <label for="permSlug" class="block text-sm font-bold text-gray-700 cursor-pointer">Permission Slug</label>
               <input
+                id="permSlug"
+                name="slug"
                 v-model="newPermission.slug"
                 type="text"
                 required
@@ -456,8 +524,10 @@ onMounted(fetchInitialData);
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-sm font-bold text-gray-700">Description</label>
+              <label for="permDescription" class="block text-sm font-bold text-gray-700 cursor-pointer">Description</label>
               <textarea
+                id="permDescription"
+                name="description"
                 v-model="newPermission.description"
                 rows="3"
                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400 resize-none"
@@ -469,14 +539,14 @@ onMounted(fetchInitialData);
               <button 
                 type="button"
                 @click="showPermissionModal = false" 
-                class="px-5 py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer"
+                class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 :disabled="isCreatingPermission || !newPermission.name || !newPermission.slug"
-                class="px-6 py-2 bg-teal text-white rounded-lg text-sm font-bold hover:bg-teal-dark transition-all shadow-sm hover:shadow-md disabled:opacity-50 flex items-center gap-2"
+                class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <LoadingIcon v-if="isCreatingPermission" size="sm" color-class="text-white" />
                 {{ isCreatingPermission ? 'Creating...' : 'Create Permission' }}
@@ -484,7 +554,6 @@ onMounted(fetchInitialData);
             </div>
           </form>
         </div>
-      </div>
     </div>
   </div>
 </template>

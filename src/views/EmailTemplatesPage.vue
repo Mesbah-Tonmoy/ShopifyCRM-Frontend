@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth';
 import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 
 interface EmailTemplate extends ApiEmailTemplate {
   app_name?: string;
@@ -243,22 +244,9 @@ const saveTemplate = async () => {
 
     <!-- Content Area -->
     <div class="bg-white rounded-lg border border-gray-200">
-      <!-- Loading State -->
-      <div v-if="loading" class="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
-        <LoadingIcon size="lg" color-class="text-teal" />
-        <span class="text-sm">Loading templates...</span>
-      </div>
 
-      <!-- Empty State -->
-      <div v-else-if="filteredTemplates.length === 0" class="flex flex-col items-center justify-center py-20 text-gray-400">
-        <svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-        <p class="text-sm italic">No email templates found matching your criteria</p>
-      </div>
 
-      <!-- Templates Table -->
-      <div v-else class="overflow-x-auto">
+      <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
@@ -271,7 +259,34 @@ const saveTemplate = async () => {
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="template in filteredTemplates" :key="template.id" class="hover:bg-gray-50/50 transition-colors">
+            <template v-if="loading">
+              <tr v-for="i in 5" :key="i">
+                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="120px" height="16px" /></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <SkeletonLoader width="100px" height="16px" custom-class="mb-2" />
+                  <SkeletonLoader width="60px" height="12px" />
+                </td>
+                <td class="px-6 py-4"><SkeletonLoader width="150px" height="16px" /></td>
+                <td class="px-6 py-4"><SkeletonLoader width="250px" height="16px" /></td>
+                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <div class="flex items-center gap-3">
+                    <SkeletonLoader width="24px" height="24px" />
+                    <SkeletonLoader width="24px" height="24px" />
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <tr v-else-if="filteredTemplates.length === 0">
+              <td colspan="6" class="py-20 text-center text-gray-400">
+                <svg class="w-12 h-12 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <p class="text-sm italic">No email templates found matching your criteria</p>
+              </td>
+            </tr>
+            <template v-else>
+              <tr v-for="template in filteredTemplates" :key="template.id" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">{{ template.app_name }}</div>
               </td>
@@ -317,6 +332,7 @@ const saveTemplate = async () => {
                 </div>
               </td>
             </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -392,13 +408,13 @@ const saveTemplate = async () => {
           </div>
 
           <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-            <button @click="closeEditModal" class="px-5 py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors cursor-pointer">
+            <button @click="closeEditModal" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-all">
               Cancel
             </button>
             <button
               @click="saveTemplate"
               :disabled="loading"
-              class="px-6 py-2 bg-teal text-white rounded-lg text-sm font-bold hover:bg-teal-dark transition-all shadow-sm hover:shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+              class="px-6 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
             >
               <LoadingIcon v-if="loading" size="sm" color-class="text-white" />
               {{ loading ? 'Saving...' : 'Save Template' }}
@@ -441,7 +457,7 @@ const saveTemplate = async () => {
           </div>
 
           <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-            <button @click="closePreviewModal" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-300 transition-all cursor-pointer">
+            <button @click="closePreviewModal" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-all">
               Close Preview
             </button>
           </div>
@@ -452,6 +468,12 @@ const saveTemplate = async () => {
 </template>
 
 <style scoped>
+.email-preview-content { 
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: #374151;
+  line-height: 1.6;
+}
 .email-preview-content :deep(p) { margin-bottom: 1em; }
 .email-preview-content :deep(a) { color: #1299A7; text-decoration: underline; }
 .email-preview-content :deep(ul), .email-preview-content :deep(ol) { margin: 1em 0; padding-left: 1.5em; }

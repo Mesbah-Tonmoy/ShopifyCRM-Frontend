@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { aclService, type Role, type Permission } from '@/services/aclService';
+import { useAuthStore } from '@/stores/auth';
 import { EditIcon, DeleteIcon, PlusIcon, CloseIcon } from '@/components/icons';
 import Swal from 'sweetalert2';
 
 const roles = ref<Role[]>([]);
 const permissionsList = ref<Permission[]>([]);
 const loading = ref(false);
+const authStore = useAuthStore();
 
 const showModal = ref(false);
 const isEditing = ref(false);
@@ -124,8 +126,12 @@ const deleteRole = async (id: number) => {
         <h1 class="text-2xl font-bold text-dark">Roles</h1>
         <p class="text-b4 text-mid mt-1">Manage user roles and their associated permissions</p>
       </div>
-      <button @click="openAddModal" class="bg-teal text-white px-4 py-2.5 rounded-lg font-medium hover:bg-teal-dark transition-colors flex items-center cursor-pointer">
-        <PlusIcon class="mr-2" />
+      <button 
+        v-if="authStore.hasPermission('roles.add')"
+        @click="openAddModal" 
+        class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+      >
+        <PlusIcon size="sm" />
         Add Role
       </button>
     </div>
@@ -152,11 +158,19 @@ const deleteRole = async (id: number) => {
         </div>
 
         <div class="flex space-x-2">
-          <button @click="openEditModal(role)" class="flex items-center justify-center gap-2 flex-1 px-4 py-2 border border-teal text-teal rounded-lg font-medium hover:bg-teal hover:text-white transition-colors">
+          <button 
+            v-if="authStore.hasPermission('roles.edit')"
+            @click="openEditModal(role)" 
+            class="flex items-center justify-center gap-2 flex-1 px-4 py-2 border border-teal text-teal rounded-lg font-medium hover:bg-teal hover:text-white transition-colors"
+          >
             <EditIcon />
             Edit Role
           </button>
-          <button @click="deleteRole(role.id)" class="flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-lg font-medium hover:bg-red-500 hover:text-white transition-colors cursor-pointer">
+          <button 
+            v-if="authStore.hasPermission('roles.edit')"
+            @click="deleteRole(role.id)" 
+            class="flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-lg font-medium hover:bg-red-500 hover:text-white transition-colors"
+          >
             <DeleteIcon />
           </button>
         </div>
@@ -164,11 +178,13 @@ const deleteRole = async (id: number) => {
     </div>
 
     <!-- Role Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
-          <h2 class="text-xl font-bold text-dark">{{ isEditing ? 'Edit Role' : 'Create New Role' }}</h2>
-          <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showModal = false"></div>
+
+      <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
+          <h3 class="text-lg font-bold text-gray-900">{{ isEditing ? 'Edit Role' : 'Create New Role' }}</h3>
+          <button @click="showModal = false" class="text-gray-400 hover:text-gray-600">
             <CloseIcon size="lg" />
           </button>
         </div>
@@ -177,12 +193,12 @@ const deleteRole = async (id: number) => {
           <form id="roleForm" @submit.prevent="saveRole">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Role Name</label>
-                <input v-model="currentRole.name" type="text" required placeholder="e.g. Compliance Manager" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+                <label for="roleName" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Role Name</label>
+                <input id="roleName" name="name" v-model="currentRole.name" type="text" required placeholder="e.g. Compliance Manager" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <input v-model="currentRole.description" type="text" placeholder="Short description of this role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+                <label for="roleDescription" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Description</label>
+                <input id="roleDescription" name="description" v-model="currentRole.description" type="text" placeholder="Short description of this role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
               </div>
             </div>
 
@@ -202,8 +218,13 @@ const deleteRole = async (id: number) => {
         </div>
 
         <div class="p-6 border-t border-gray-100 flex gap-3">
-          <button type="button" @click="showModal = false" class="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-          <button type="submit" form="roleForm" class="flex-1 px-4 py-2.5 bg-teal text-white rounded-lg font-medium hover:bg-teal-dark">
+          <button type="button" @click="showModal = false" class="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg transition-all font-medium hover:bg-gray-50">Cancel</button>
+          <button 
+            type="submit" 
+            form="roleForm" 
+            :disabled="!currentRole.name"
+            class="flex-1 px-4 py-2.5 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50"
+          >
             {{ isEditing ? 'Update Role' : 'Create Role' }}
           </button>
         </div>

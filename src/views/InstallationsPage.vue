@@ -2,13 +2,16 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useInstallationsStore } from '@/stores/installations.ts';
+import { useAuthStore } from '@/stores/auth';
 import { VueDatePicker } from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import dayjs from 'dayjs';
 import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths } from 'date-fns';
 import { exportToCSV } from '@/utils/export';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 
 const installationsStore = useInstallationsStore();
+const authStore = useAuthStore();
 const route = useRoute();
 const searchQuery = ref('');
 const dateFrom = ref('');
@@ -57,7 +60,7 @@ const statusOptions = [
 
 // Handle date range changes
 const handleDateChange = (newDate: Date[] | null) => {
-  if (newDate && newDate.length === 2) {
+  if (newDate && newDate.length === 2 && newDate[0] && newDate[1]) {
     // Both dates selected - fetch data
     dateFrom.value = dayjs(newDate[0]).format('YYYY-MM-DD');
     dateTo.value = dayjs(newDate[1]).format('YYYY-MM-DD');
@@ -480,8 +483,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                       :time-config="{ enableTimePicker: false }"
                       :placeholder="dateRangePlaceholderText"
                       :preset-dates="presetDates"
-                      @closed="handleDateChange(date)"
-                      @cleared="clearDates"
+                      @update:model-value="handleDateChange"
                   >
                     <template #arrow-left>
                         <i class="icon-chevron-left-regular"/>
@@ -519,6 +521,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
               </div>
 
               <button
+                v-if="authStore.hasPermission('installations.export')"
                 @click="handleExport"
                 class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal cursor-pointer"
               >
@@ -531,14 +534,10 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
           </div>
         </div>
 
-        <!-- Loading State -->
-        <div v-if="installationsStore.loading" class="text-center py-12">
-          <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal"></div>
-          <p class="mt-4 text-gray-600">Loading installations...</p>
-        </div>
+
 
         <!-- Error State -->
-        <div v-else-if="installationsStore.error" class="bg-red-50 p-4 rounded-lg">
+        <div v-if="installationsStore.error" class="bg-red-50 p-4 rounded-lg">
           <p class="text-red-800">{{ installationsStore.error }}</p>
         </div>
 
@@ -631,7 +630,19 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-for="installation in paginatedInstallations" :key="installation.id" class="hover:bg-gray-50">
+                <template v-if="installationsStore.loading">
+                  <tr v-for="i in 5" :key="i">
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="150px" height="16px" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="200px" height="16px" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="24px" custom-class="rounded-full" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="24px" custom-class="rounded-full" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="40px" height="16px" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
+                  </tr>
+                </template>
+                <tr v-else v-for="installation in paginatedInstallations" :key="installation.id" class="hover:bg-gray-50">
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="text-sm font-medium text-gray-900">{{ installation.app?.app_name || 'N/A' }}</div>
                   </td>

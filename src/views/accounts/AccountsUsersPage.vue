@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { aclService, type User, type Role } from '@/services/aclService';
+import { useAuthStore } from '@/stores/auth';
 import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon, CloseIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import Swal from 'sweetalert2';
 
 const users = ref<User[]>([]);
@@ -10,6 +12,7 @@ const rolesList = ref<Role[]>([]);
 const loading = ref(false);
 const searchQuery = ref('');
 const selectedRole = ref('all');
+const authStore = useAuthStore();
 
 // Computed roles with counts for filtering
 const roleFilters = computed(() => {
@@ -197,7 +200,11 @@ const deleteUser = async (id: number) => {
         </div>
 
         <!-- Add User Button -->
-        <button @click="openAddModal" class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all flex items-center gap-2 shadow-sm hover:shadow-md">
+        <button 
+          v-if="authStore.hasPermission('users.add')"
+          @click="openAddModal" 
+          class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+        >
           <PlusIcon size="sm" />
           Add New User
         </button>
@@ -216,14 +223,31 @@ const deleteUser = async (id: number) => {
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-if="loading">
-              <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                <div class="flex items-center justify-center gap-2">
-                  <LoadingIcon size="sm" color-class="text-teal" />
-                  Loading users...
-                </div>
-              </td>
-            </tr>
+            <template v-if="loading">
+              <tr v-for="i in 5" :key="i">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <SkeletonLoader width="32px" height="32px" custom-class="rounded-full mr-3" />
+                    <SkeletonLoader width="120px" height="16px" />
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <SkeletonLoader width="180px" height="16px" />
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex gap-1">
+                    <SkeletonLoader width="60px" height="24px" custom-class="rounded-full" />
+                    <SkeletonLoader width="70px" height="24px" custom-class="rounded-full" />
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
+                    <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
+                  </div>
+                </td>
+              </tr>
+            </template>
             <tr v-else-if="filteredUsers.length === 0">
               <td colspan="4" class="px-6 py-4 text-center text-gray-500 italic">No users found match your criteria</td>
             </tr>
@@ -249,10 +273,18 @@ const deleteUser = async (id: number) => {
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                 <div class="flex items-center justify-end gap-2">
-                  <button @click="openEditModal(user)" class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-teal-500 bg-white hover:bg-teal-50 transition-colors gap-1.5">
+                  <button 
+                    v-if="authStore.hasPermission('users.edit')"
+                    @click="openEditModal(user)" 
+                    class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-teal-500 bg-white hover:bg-teal-50 transition-colors gap-1.5"
+                  >
                     <EditIcon size="md" />Edit
                   </button>
-                  <button @click="user.id && deleteUser(user.id)" class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-red-500 bg-white hover:bg-red-50 transition-colors gap-1.5">
+                  <button 
+                    v-if="authStore.hasPermission('users.edit')"
+                    @click="user.id && deleteUser(user.id)" 
+                    class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-red-500 bg-white hover:bg-red-50 transition-colors gap-1.5"
+                  >
                     <DeleteIcon size="md" />Delete
                   </button>
                 </div>
@@ -264,34 +296,36 @@ const deleteUser = async (id: number) => {
     </div>
 
     <!-- User Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <div class="flex justify-between items-center mb-6">
-          <h2 class="text-xl font-bold text-dark">{{ isEditing ? 'Edit User' : 'Add New User' }}</h2>
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showModal = false"></div>
+
+      <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
+          <h3 class="text-lg font-bold text-gray-900">{{ isEditing ? 'Edit User' : 'Add New User' }}</h3>
           <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
             <CloseIcon size="lg" />
           </button>
         </div>
 
-        <form @submit.prevent="saveUser">
+        <form @submit.prevent="saveUser" class="p-6 space-y-5">
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-              <input v-model="currentUser.name" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+              <label for="userName" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Full Name</label>
+              <input id="userName" name="name" v-model="currentUser.name" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <input v-model="currentUser.email" type="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+              <label for="userEmail" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Email Address</label>
+              <input id="userEmail" name="email" v-model="currentUser.email" type="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
             </div>
             <div v-if="!isEditing">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input v-model="currentUser.password" type="password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+              <label for="userPassword" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Password</label>
+              <input id="userPassword" name="password" v-model="currentUser.password" type="password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Roles</label>
               <div class="grid grid-cols-2 gap-2">
-                <label v-for="role in rolesList" :key="role.id" class="flex items-center space-x-2 text-sm">
-                  <input type="checkbox" :value="role.id" v-model="currentUser.role_ids" class="rounded text-teal focus:ring-teal">
+                <label v-for="role in rolesList" :key="role.id" :for="'role-'+role.id" class="flex items-center space-x-2 text-sm cursor-pointer">
+                  <input type="checkbox" :id="'role-'+role.id" :value="role.id" v-model="currentUser.role_ids" class="rounded text-teal focus:ring-teal">
                   <span>{{ role.name }}</span>
                 </label>
               </div>
@@ -299,8 +333,12 @@ const deleteUser = async (id: number) => {
           </div>
 
           <div class="mt-8 flex gap-3">
-            <button type="button" @click="showModal = false" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-            <button type="submit" class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:bg-teal-dark">
+            <button type="button" @click="showModal = false" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg transition-all font-medium hover:bg-gray-50">Cancel</button>
+            <button 
+              type="submit" 
+              :disabled="!currentUser.name || !currentUser.email || (!isEditing && !currentUser.password)"
+              class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50"
+            >
               {{ isEditing ? 'Update User' : 'Create User' }}
             </button>
           </div>
