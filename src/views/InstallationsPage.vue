@@ -219,7 +219,7 @@ const handleExport = () => {
     item.app?.app_name || 'N/A',
     item.store_name,
     item.email,
-    getPlanName(item.app_plan),
+    getPlanDetails(item.app_plan)?.name || 'No plan',
     getShopifyPlan(item.shopify_plan),
     getStatusText(item.is_active),
     item.install_count,
@@ -312,16 +312,41 @@ const getStatusText = (isActive: boolean) => {
   return isActive ? 'Active' : 'Inactive';
 };
 
-const getPlanName = (appPlan: string | null) => {
-  if (!appPlan) return 'No plan';
+const getPlanDetails = (appPlan: string | null) => {
+  if (!appPlan) return null;
   
   try {
-    const planData = typeof appPlan === 'string' ? JSON.parse(appPlan) : appPlan;
-    return planData.plan_name || 'No plan';
-  } catch (error) {
-    // If it's not JSON, return it as is (backward compatibility)
-    return appPlan || 'No plan';
+    const data = typeof appPlan === 'string' ? JSON.parse(appPlan) : appPlan;
+    
+    if (data && typeof data === 'object' && data.plan_name) {
+      const name = data.plan_name;
+      const status = data.status;
+      const isFree = name.toLowerCase().includes('free');
+
+      if (isFree) return { name, isDetailed: false };
+
+      let validity = '';
+      if (status?.toLowerCase() === 'active' && data.plan_started_at) {
+        const startDate = dayjs(data.plan_started_at);
+        const trialDays = data.trial_days || 0;
+        const isAnnual = name.toLowerCase().includes('annual');
+        
+        const expiryDate = startDate.add(trialDays, 'day').add(isAnnual ? 1 : 1, isAnnual ? 'year' : 'month');
+        validity = expiryDate.format('MMM DD, YYYY');
+      }
+
+      return {
+        name,
+        status,
+        validity,
+        isDetailed: true
+      };
+    }
+  } catch (e) {
+    // Fallback
   }
+  
+  return { name: appPlan || 'No plan', isDetailed: false };
 };
 
 const getShopifyPlan = (shopifyPlan: string | null) => {
@@ -656,10 +681,28 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                       {{ installation.email }}
                     </div>
                   </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-light text-blue">
-                      {{ getPlanName(installation.app_plan) }}
-                    </span>
+                  <td class="px-6 py-4">
+                    <div v-if="getPlanDetails(installation.app_plan)" class="flex flex-col gap-1.5">
+                      <span class="px-2 w-max inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-light text-blue">
+                        {{ getPlanDetails(installation.app_plan)?.name }}
+                      </span>
+                      <template v-if="getPlanDetails(installation.app_plan)?.isDetailed">
+                        <span 
+                          :class="[
+                            'px-2 w-max text-[10px] leading-5 font-semibold rounded-full capitalize',
+                            getPlanDetails(installation.app_plan)?.status?.toLowerCase() === 'cancelled' 
+                              ? 'bg-red-50 text-red-600' 
+                              : 'bg-blue-light text-teal'
+                          ]"
+                        >
+                          {{ getPlanDetails(installation.app_plan)?.status?.toLowerCase() }}
+                        </span>
+                        <span v-if="getPlanDetails(installation.app_plan)?.validity" class="px-2 w-max text-[10px] leading-5 font-semibold rounded-full bg-blue-light text-teal">
+                          Valid until {{ getPlanDetails(installation.app_plan)?.validity }}
+                        </span>
+                      </template>
+                    </div>
+                    <span v-else class="text-sm text-gray-400 italic">No plan</span>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-violet-light text-violet-100">
