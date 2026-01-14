@@ -1,5 +1,5 @@
 // src/services/api.ts
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://crm.zapioapps.com/backendapp/api';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -44,7 +44,7 @@ class ApiService {
   }
 
   async post<T>(endpoint: string, body: unknown, includeAuth = true): Promise<ApiResponse<T>> {
-    console.log('**** ',endpoint, body);
+    console.log('**** ', endpoint, body);
     const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: this.getHeaders(includeAuth),
