@@ -2,12 +2,14 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { LoadingIcon } from '@/components/icons';
 import dayjs from 'dayjs';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const currentDateTime = ref('');
 const userMenuOpen = ref(false);
+const isLoggingOut = ref(false);
 
 const updateDateTime = () => {
   currentDateTime.value = dayjs().format('MMMM DD, YYYY · h:mm a');
@@ -27,8 +29,13 @@ onUnmounted(() => {
 });
 
 const handleLogout = async () => {
-  await authStore.logout();
-  router.push({ name: 'login' });
+  isLoggingOut.value = true;
+  try {
+    await authStore.logout();
+    router.push({ name: 'login' });
+  } finally {
+    isLoggingOut.value = false;
+  }
 };
 
 const toggleUserMenu = () => {
@@ -87,12 +94,14 @@ const closeUserMenu = () => {
         >
           <button
             @click="handleLogout"
-            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+            :disabled="isLoggingOut"
+            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <LoadingIcon v-if="isLoggingOut" size="xs" />
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span>Logout</span>
+            <span>{{ isLoggingOut ? 'Logging out...' : 'Logout' }}</span>
           </button>
         </div>
       </div>

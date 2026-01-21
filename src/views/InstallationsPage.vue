@@ -3,6 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useInstallationsStore } from '@/stores/installations.ts';
 import { useAuthStore } from '@/stores/auth';
+import { SortIcon, ChevronDown } from '@/components/icons';
 import { VueDatePicker } from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import dayjs from 'dayjs';
@@ -295,13 +296,6 @@ const visiblePages = computed(() => {
   return pages;
 });
 
-const getSortIcon = (column: string) => {
-  if (sortBy.value !== column) {
-    return '↕️';
-  }
-  return sortOrder.value === 'asc' ? '↑' : '↓';
-};
-
 const getStatusColor = (isActive: boolean) => {
   return isActive 
     ? 'bg-green-lighter text-green' 
@@ -374,13 +368,13 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
 
           <!-- App Plan Filter -->
           <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background">
+            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
                <i class="icon-list-regular"></i>
                Plans
             </h4>
             <div>
-               <label v-for="plan in appPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal">
-                 <input type="checkbox" :value="plan.value" v-model="selectedPlans" @change="fetchData" class="h-4 w-4 mr-2 cursor-pointer">
+               <label v-for="plan in appPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
+                 <input type="checkbox" :value="plan.value" v-model="selectedPlans" @change="fetchData" class="h-4 w-4 mr-2 mt-[2px]">
                  <span class="text-sm">{{ plan.label }}</span>
                </label>
             </div>
@@ -388,13 +382,13 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
 
           <!-- Shopify Plan Filter -->
           <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background">
+            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
                Shopify Plan
             </h4>
             <div>
-               <label v-for="plan in shopifyPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal">
-                 <input type="checkbox" :value="plan.value" v-model="selectedShopifyPlans" @change="fetchData" class="h-4 w-4 mr-2 cursor-pointer">
+               <label v-for="plan in shopifyPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
+                 <input type="checkbox" :value="plan.value" v-model="selectedShopifyPlans" @change="fetchData" class="h-4 w-4 mr-2 mt-[3px]">
                  <span class="text-sm">{{ plan.label }}</span>
                </label>
             </div>
@@ -402,13 +396,13 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
 
            <!-- Status Filter -->
           <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background">
+            <h4 class="flex gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                Status
             </h4>
             <div>
-               <label v-for="status in statusOptions" :key="String(status.value)" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal">
-                 <input type="checkbox" :value="status.value" v-model="selectedStatuses" @change="fetchData" class="h-4 w-4 mr-2 cursor-pointer">
+               <label v-for="status in statusOptions" :key="String(status.value)" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal cursor-pointer">
+                 <input type="checkbox" :value="status.value" v-model="selectedStatuses" @change="fetchData" class="h-4 w-4 mr-2 mt-[2px]">
                  <span class="text-sm">{{ status.label }}</span>
                </label>
             </div>
@@ -579,7 +573,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>App</span>
-                      <span class="text-gray-400">{{ getSortIcon('app_name') }}</span>
+                      <SortIcon v-if="sortBy !== 'app_name'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -589,7 +584,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Store</span>
-                      <span class="text-gray-400">{{ getSortIcon('store_name') }}</span>
+                      <SortIcon v-if="sortBy !== 'store_name'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -599,7 +595,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Email</span>
-                      <span class="text-gray-400">{{ getSortIcon('email') }}</span>
+                      <SortIcon v-if="sortBy !== 'email'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -609,7 +606,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Plan</span>
-                      <span class="text-gray-400">{{ getSortIcon('app_plan') }}</span>
+                      <SortIcon v-if="sortBy !== 'app_plan'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -619,7 +617,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Shopify Plan</span>
-                      <span class="text-gray-400">{{ getSortIcon('shopify_plan') }}</span>
+                      <SortIcon v-if="sortBy !== 'shopify_plan'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -629,7 +628,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Status</span>
-                      <span class="text-gray-400">{{ getSortIcon('is_active') }}</span>
+                      <SortIcon v-if="sortBy !== 'is_active'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -639,7 +639,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Installs</span>
-                      <span class="text-gray-400">{{ getSortIcon('install_count') }}</span>
+                      <SortIcon v-if="sortBy !== 'install_count'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                   <th 
@@ -649,7 +650,8 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   >
                     <div class="flex items-center space-x-1">
                       <span>Created</span>
-                      <span class="text-gray-400">{{ getSortIcon('created_at') }}</span>
+                      <SortIcon v-if="sortBy !== 'created_at'" size="sm" class="text-gray-400" />
+                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
                 </tr>

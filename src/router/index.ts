@@ -12,6 +12,12 @@ const routes = [
     }
   },
   {
+    path: '/auth/callback',
+    name: 'auth-callback',
+    component: () => import('@/views/AuthCallback.vue'),
+    meta: { isPublic: true }
+  },
+  {
     path: '/',
     component: MainLayout,
     meta: { requiresAuth: true },
@@ -61,7 +67,7 @@ const routes = [
         name: 'accounts-roles',
         component: () => import('@/views/accounts/AccountsRolesPage.vue'),
         meta: { permission: 'roles.view' }
-      },
+      }
     ]
   },
 ]
@@ -97,4 +103,3 @@ router.beforeEach(async (to, from, next) => {
 })
 
 export default router
-

@@ -6,3 +6,5 @@ export { default as EditIcon } from './EditIcon.vue';
 export { default as LoadingIcon } from './LoadingIcon.vue';
 export { default as PlusIcon } from './PlusIcon.vue';
 export { default as ViewIcon } from './ViewIcon.vue';
+export { default as SortIcon } from './SortIcon.vue';
+export { default as GoogleIcon } from './GoogleIcon.vue';
