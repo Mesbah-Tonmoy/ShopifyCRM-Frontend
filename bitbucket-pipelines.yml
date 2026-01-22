@@ -1,0 +1,22 @@
+image: node:20-alpine
+
+pipelines:
+  branches:
+    master:
+      - step:
+          name: Build and Deploy Frontend
+          deployment: Production
+          trigger: manual
+          caches:
+            - node
+          script:
+            - npm ci
+            - npm run build
+            - pipe: atlassian/rsync-deploy:0.13.0
+              variables:
+                USER: $SSH_USER
+                SERVER: $SERVER_IP
+                REMOTE_PATH: $DEPLOY_DIR
+                LOCAL_PATH: dist/
+                EXTRA_ARGS:
+                  - "--delete" # Removes old/unused assets from server
