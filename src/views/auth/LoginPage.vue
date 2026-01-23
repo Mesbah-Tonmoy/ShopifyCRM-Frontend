@@ -36,7 +36,8 @@ const isGoogleLoading = ref(false);
 const loginWithGoogle = () => {
   isGoogleLoading.value = true;
   // Redirect to backend Google auth route
-  window.location.href = 'http://localhost:8000/auth/google';
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://crm.zapioapps.com/backendapp';
+  window.location.href = `${backendUrl}/auth/google`;
 };
 </script>
 
