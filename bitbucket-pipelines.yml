@@ -2,11 +2,10 @@ image: node:20-alpine
 
 pipelines:
   branches:
-    master:
+    development:
       - step:
           name: Build and Deploy Frontend
           deployment: Production
-          trigger: manual
           caches:
             - node
           script:
