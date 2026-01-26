@@ -6,6 +6,7 @@ import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon, CloseIcon } from '@/compon
 import SearchInput from '@/components/common/SearchInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import Swal from 'sweetalert2';
+import { Toast } from '@/utils/toast';
 
 const users = ref<User[]>([]);
 const rolesList = ref<Role[]>([]);
@@ -13,6 +14,7 @@ const loading = ref(false);
 const searchQuery = ref('');
 const selectedRole = ref('all');
 const authStore = useAuthStore();
+const isSaving = ref(false);
 
 // Computed roles with counts for filtering
 const roleFilters = computed(() => {
@@ -62,6 +64,7 @@ const currentUser = ref<Partial<User & { password?: string, role_ids: number[] }
 
 const fetchUsers = async () => {
   loading.value = true;
+  users.value = []; // Clear old data to ensure skeletons are the only thing visible
   try {
     const response = await aclService.getUsers();
     if (response.success) {
@@ -113,6 +116,7 @@ const openEditModal = (user: User) => {
 };
 
 const saveUser = async () => {
+  isSaving.value = true;
   try {
     const payload = {
       name: currentUser.value.name,
@@ -129,12 +133,17 @@ const saveUser = async () => {
     }
 
     if (response.success) {
-      Swal.fire('Success', response.message, 'success');
+      Toast.fire({
+        icon: 'success',
+        title: response.message
+      });
       showModal.value = false;
       fetchUsers();
     }
   } catch (error: any) {
     Swal.fire('Error', error.response?.data?.message || 'Failed to save user', 'error');
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -150,16 +159,37 @@ const deleteUser = async (id: number) => {
   });
 
   if (result.isConfirmed) {
+    Swal.fire({
+      title: 'Deleting...',
+      text: 'Please wait while we delete the user',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
       const response = await aclService.deleteUser(id) as any;
       if (response.success) {
-        Swal.fire('Deleted!', response.message, 'success');
+        Toast.fire({
+          icon: 'success',
+          title: response.message
+        });
         fetchUsers();
       }
     } catch (error) {
       Swal.fire('Error', 'Failed to delete user', 'error');
     }
   }
+};
+
+const generatePassword = () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+';
+  let password = '';
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  currentUser.value.password = password;
 };
 </script>
 
@@ -251,7 +281,8 @@ const deleteUser = async (id: number) => {
             <tr v-else-if="filteredUsers.length === 0">
               <td colspan="4" class="px-6 py-4 text-center text-gray-500 italic">No users found match your criteria</td>
             </tr>
-            <tr v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors">
+            <template v-else>
+              <tr v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="w-8 h-8 rounded-full bg-teal/10 flex items-center justify-center mr-3 overflow-hidden">
@@ -290,6 +321,7 @@ const deleteUser = async (id: number) => {
                 </div>
               </td>
             </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -319,7 +351,14 @@ const deleteUser = async (id: number) => {
             </div>
             <div v-if="!isEditing">
               <label for="userPassword" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Password</label>
-              <input id="userPassword" name="password" v-model="currentUser.password" type="password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+              <input id="userPassword" name="password" v-model="currentUser.password" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
+              <button 
+                type="button" 
+                @click="generatePassword" 
+                class="mt-1 text-xs text-teal hover:text-teal-dark font-medium cursor-pointer"
+              >
+                Generate Password
+              </button>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Roles</label>
@@ -336,10 +375,11 @@ const deleteUser = async (id: number) => {
             <button type="button" @click="showModal = false" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg transition-all font-medium hover:bg-gray-50">Cancel</button>
             <button 
               type="submit" 
-              :disabled="!currentUser.name || !currentUser.email || (!isEditing && !currentUser.password)"
-              class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50"
+              :disabled="isSaving || !currentUser.name || !currentUser.email || (!isEditing && !currentUser.password)"
+              class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {{ isEditing ? 'Update User' : 'Create User' }}
+              <LoadingIcon v-if="isSaving" size="xs" />
+              {{ isSaving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update User' : 'Create User') }}
             </button>
           </div>
         </form>

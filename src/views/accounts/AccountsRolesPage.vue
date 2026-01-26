@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { aclService, type Role, type Permission } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
-import { EditIcon, DeleteIcon, PlusIcon, CloseIcon } from '@/components/icons';
+import { EditIcon, DeleteIcon, PlusIcon, CloseIcon, LoadingIcon } from '@/components/icons';
 import Swal from 'sweetalert2';
+import { Toast } from '@/utils/toast';
 
 const roles = ref<Role[]>([]);
 const permissionsList = ref<Permission[]>([]);
 const loading = ref(false);
+const isSaving = ref(false);
 const authStore = useAuthStore();
 
 const showModal = ref(false);
@@ -70,6 +72,7 @@ const openEditModal = (role: Role) => {
 };
 
 const saveRole = async () => {
+  isSaving.value = true;
   try {
     const payload = {
       name: currentRole.value.name,
@@ -85,12 +88,17 @@ const saveRole = async () => {
     }
 
     if (response.success) {
-      Swal.fire('Success', response.message, 'success');
+      Toast.fire({
+        icon: 'success',
+        title: response.message
+      });
       showModal.value = false;
       fetchRoles();
     }
   } catch (error: any) {
     Swal.fire('Error', error.response?.data?.message || 'Failed to save role', 'error');
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -106,10 +114,22 @@ const deleteRole = async (id: number) => {
   });
 
   if (result.isConfirmed) {
+    Swal.fire({
+      title: 'Deleting...',
+      text: 'Please wait while we delete the role',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
       const response = await aclService.deleteRole(id) as any;
       if (response.success) {
-        Swal.fire('Deleted!', response.message, 'success');
+        Toast.fire({
+          icon: 'success',
+          title: response.message
+        });
         fetchRoles();
       }
     } catch (error) {
@@ -222,10 +242,11 @@ const deleteRole = async (id: number) => {
           <button 
             type="submit" 
             form="roleForm" 
-            :disabled="!currentRole.name"
-            class="flex-1 px-4 py-2.5 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50"
+            :disabled="isSaving || !currentRole.name"
+            class="flex-1 px-4 py-2.5 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {{ isEditing ? 'Update Role' : 'Create Role' }}
+            <LoadingIcon v-if="isSaving" size="xs" />
+            {{ isSaving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Role' : 'Create Role') }}
           </button>
         </div>
       </div>

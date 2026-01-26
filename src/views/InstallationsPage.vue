@@ -55,8 +55,8 @@ const shopifyPlanOptions = computed(() =>
 );
 
 const statusOptions = [
-    { label: 'Active', value: true },
-    { label: 'Inactive', value: false }
+    { label: 'Installed', value: true },
+    { label: 'Uninstalled', value: false }
 ];
 
 // Handle date range changes

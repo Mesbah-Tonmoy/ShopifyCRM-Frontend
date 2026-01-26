@@ -3,8 +3,10 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { aclService, type Permission, type Role } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
 import Swal from 'sweetalert2';
+
 import { CloseIcon, PlusIcon, LoadingIcon } from '@/components/icons';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import { Toast } from '@/utils/toast';
 
 const roles = ref<Role[]>([]);
 const allPermissions = ref<Permission[]>([]);
@@ -129,12 +131,9 @@ const savePermissions = async () => {
     });
 
     if (response.success) {
-      Swal.fire({
-        title: 'Success',
-        text: 'Permissions updated successfully',
+      Toast.fire({
         icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
+        title: 'Permissions updated successfully'
       });
       // Update local role data
       const roleToUpdate = roles.value.find(r => r.id === selectedRoleId.value);
@@ -163,19 +162,16 @@ const handleCreatePermission = async () => {
       description: newPermission.value.description
     });
 
-    if (response.success) {
-      allPermissions.value.push(response.data);
-      showPermissionModal.value = false;
-      newPermission.value = { name: '', slug: '', description: '' };
-      
-      Swal.fire({
-        title: 'Success',
-        text: 'Permission created successfully',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
-      });
-    }
+      if (response.success) {
+        allPermissions.value.push(response.data);
+        showPermissionModal.value = false;
+        newPermission.value = { name: '', slug: '', description: '' };
+        
+        Toast.fire({
+          icon: 'success',
+          title: 'Permission created successfully'
+        });
+      }
   } catch (error) {
     Swal.fire('Error', 'Failed to create permission', 'error');
   } finally {
