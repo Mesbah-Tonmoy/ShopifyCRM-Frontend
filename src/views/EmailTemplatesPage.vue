@@ -440,18 +440,24 @@ const saveTemplate = async () => {
             </button>
           </div>
 
-          <div class="p-6">
-            <div class="border border-gray-200 rounded-xl overflow-hidden shadow-inner">
-              <div class="bg-gray-50 px-4 py-3 border-b border-gray-100">
-                <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Subject</span>
-                  <div class="h-4 w-[1px] bg-gray-200"></div>
-                  <div class="text-sm font-bold text-gray-900">{{ previewTemplate.subject }}</div>
+          <div class="p-6 bg-gray-50/50">
+            <div class="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
+              <div class="bg-white px-6 py-4 border-b border-gray-100">
+                <div class="flex items-start gap-4">
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Subject</span>
+                  <div class="text-sm font-bold text-gray-900 flex-1">{{ previewTemplate.subject }}</div>
                 </div>
               </div>
 
-              <div class="p-8 bg-white max-h-[500px] overflow-y-auto custom-scrollbar">
-                <div v-html="previewTemplate.body" class="email-preview-content prose prose-sm max-w-none"></div>
+              <div class="p-0 bg-gray-100/50 max-h-[600px] overflow-y-auto custom-scrollbar">
+                <!-- Simulated Email Container -->
+                <div class="py-10 px-4 min-h-full flex justify-center">
+                  <div class="bg-white w-full max-w-[600px] rounded-xl border border-gray-200 shadow-xl overflow-hidden">
+                    <div class="p-10">
+                      <div v-html="previewTemplate.body" class="email-preview-content prose prose-sm max-w-none"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -473,11 +479,12 @@ const saveTemplate = async () => {
   overflow-wrap: break-word;
   color: #374151;
   line-height: 1.6;
+  font-size: 14px;
 }
-.email-preview-content :deep(p) { margin-bottom: 1em; }
-.email-preview-content :deep(a) { color: #1299A7; text-decoration: underline; }
-.email-preview-content :deep(ul), .email-preview-content :deep(ol) { margin: 1em 0; padding-left: 1.5em; }
-.email-preview-content :deep(li) { margin-bottom: 0.5em; }
+.email-preview-content :deep(p) { margin-top: 0; margin-bottom: 1.25em; }
+.email-preview-content :deep(a) { color: #1299A7; text-decoration: underline; font-weight: 500; }
+.email-preview-content :deep(ul), .email-preview-content :deep(ol) { margin-top: 1.25em; margin-bottom: 1.25em; padding-left: 1.625em; }
+.email-preview-content :deep(li) { margin-top: 0.5em; margin-bottom: 0.5em; }
 
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

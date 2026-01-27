@@ -396,7 +396,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
 
            <!-- Status Filter -->
           <div class="mb-4">
-            <h4 class="flex gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
+            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                Status
             </h4>
