@@ -71,7 +71,7 @@ const handleResync = async (id: number) => {
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#008080',
-    cancelButtonColor: '#d33',
+    cancelButtonColor: '#6B7280',
     confirmButtonText: 'Yes, resync it!'
   });
 
@@ -103,7 +103,7 @@ const handleDelete = async (id: number) => {
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#d33',
-    cancelButtonColor: '#3085d6',
+    cancelButtonColor: '#6B7280',
     confirmButtonText: 'Yes, delete it!'
   });
 

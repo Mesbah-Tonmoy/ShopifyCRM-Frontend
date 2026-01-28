@@ -53,6 +53,7 @@ export interface Installation {
   plan_expires_at: string | null;
   is_active: boolean;
   install_count: number;
+  installed_at: string | null;
   created_at: string;
   updated_at: string;
   app?: App;

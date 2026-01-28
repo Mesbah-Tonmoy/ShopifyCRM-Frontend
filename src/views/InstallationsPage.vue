@@ -3,7 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useInstallationsStore } from '@/stores/installations.ts';
 import { useAuthStore } from '@/stores/auth';
-import { SortIcon, ChevronDown } from '@/components/icons';
+import { SortIcon, ChevronDown, ExternalLinkIcon } from '@/components/icons';
 import { VueDatePicker } from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import dayjs from 'dayjs';
@@ -213,7 +213,7 @@ const handleExport = () => {
   }
 
   // Define headers
-  const headers = ['App', 'Store', 'Email', 'Plan', 'Shopify Plan', 'Status', 'Installs', 'Created'];
+  const headers = ['App', 'Store', 'Email', 'Plan', 'Shopify Plan', 'Status', 'Installs', 'Installed'];
   
   // Map data to rows
   const rows = paginatedInstallations.value.map((item: any) => [
@@ -224,7 +224,7 @@ const handleExport = () => {
     getShopifyPlan(item.shopify_plan),
     getStatusText(item.is_active),
     item.install_count,
-    new Date(item.created_at).toLocaleDateString()
+    item.installed_at ? dayjs(item.installed_at).format('MMM DD, YYYY') : 'N/A'
   ]);
 
   const filename = `installations_export_${new Date().toISOString().split('T')[0]}`;
@@ -303,7 +303,7 @@ const getStatusColor = (isActive: boolean) => {
 };
 
 const getStatusText = (isActive: boolean) => {
-  return isActive ? 'Active' : 'Inactive';
+  return isActive ? 'Installed' : 'Uninstalled';
 };
 
 const getPlanDetails = (appPlan: string | null) => {
@@ -646,11 +646,11 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   <th 
                     scope="col" 
                     class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('created_at')"
+                    @click="handleSort('installed_at')"
                   >
                     <div class="flex items-center space-x-1">
-                      <span>Created</span>
-                      <SortIcon v-if="sortBy !== 'created_at'" size="sm" class="text-gray-400" />
+                      <span>Installed</span>
+                      <SortIcon v-if="sortBy !== 'installed_at'" size="sm" class="text-gray-400" />
                       <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
                     </div>
                   </th>
@@ -674,8 +674,17 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     <div class="text-sm font-medium text-gray-900">{{ installation.app?.app_name || 'N/A' }}</div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm font-medium text-gray-900">
-                      {{ installation.store_name }}
+                    <div class="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                      <span>{{ installation.store_name }}</span>
+                      <a 
+                        v-if="installation.store_url" 
+                        :href="'https://' + installation.store_url" 
+                        target="_blank" 
+                        class="text-gray-400 hover:text-teal transition-colors"
+                        title="Open store in new tab"
+                      >
+                        <ExternalLinkIcon size="sm" />
+                      </a>
                     </div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
@@ -720,7 +729,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     {{ installation.install_count }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ new Date(installation.created_at).toLocaleDateString() }}
+                    {{ installation.installed_at ? dayjs(installation.installed_at).format('MMM DD, YYYY') : 'N/A' }}
                   </td>
                 </tr>
               </tbody>

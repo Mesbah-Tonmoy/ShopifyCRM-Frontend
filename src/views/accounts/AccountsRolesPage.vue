@@ -108,8 +108,8 @@ const deleteRole = async (id: number) => {
     text: "This will remove the role from all users assigned to it!",
     icon: 'warning',
     showCancelButton: true,
-    confirmButtonColor: '#3085d6',
-    cancelButtonColor: '#d33',
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#6B7280',
     confirmButtonText: 'Yes, delete it!'
   });
 

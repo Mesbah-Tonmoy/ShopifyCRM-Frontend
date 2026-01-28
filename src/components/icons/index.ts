@@ -8,3 +8,4 @@ export { default as PlusIcon } from './PlusIcon.vue';
 export { default as ViewIcon } from './ViewIcon.vue';
 export { default as SortIcon } from './SortIcon.vue';
 export { default as GoogleIcon } from './GoogleIcon.vue';
+export { default as ExternalLinkIcon } from './ExternalLinkIcon.vue';
