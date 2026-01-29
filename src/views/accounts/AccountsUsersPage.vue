@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon, CloseIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import Swal from 'sweetalert2';
 import { Toast } from '@/utils/toast';
 
@@ -195,10 +196,10 @@ const generatePassword = () => {
 
 <template>
   <div>
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-dark">Users List</h1>
-      <p class="text-b4 text-mid mt-1">Manage user accounts and assigned roles</p>
-    </div>
+    <PageHeader 
+      title="Users List" 
+      description="Manage user accounts and assigned roles" 
+    />
 
     <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
       <div class="flex flex-wrap items-center justify-between gap-4">

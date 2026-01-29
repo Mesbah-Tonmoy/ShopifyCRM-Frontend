@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 
 // Placeholder data
 const pricingPlans = ref([
@@ -29,10 +30,10 @@ const pricingPlans = ref([
 
 <template>
   <div>
-    <div class="mb-6">
-      <h1 class="text-h2 font-bold text-dark">Pricing Plans</h1>
-      <p class="text-b4 text-mid mt-1">Manage your pricing plans and subscriptions</p>
-    </div>
+    <PageHeader 
+      title="Pricing Plans" 
+      description="Manage your pricing plans and subscriptions" 
+    />
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div

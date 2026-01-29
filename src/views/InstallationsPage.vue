@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths } from 'date-fns';
 import { exportToCSV } from '@/utils/export';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 
 const installationsStore = useInstallationsStore();
 const authStore = useAuthStore();
@@ -351,9 +352,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-dark">Installation List</h1>
-    </div>
+    <PageHeader title="Installation List" />
 
     <!-- Main Content Area with Sidebar -->
     <div class="flex flex-col lg:flex-row gap-5">

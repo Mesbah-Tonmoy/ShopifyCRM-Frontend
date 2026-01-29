@@ -14,6 +14,7 @@ import {
 } from 'chart.js';
 import { Line } from 'vue-chartjs';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 
 ChartJS.register(
   CategoryScale,
@@ -112,10 +113,10 @@ const chartOptions = {
 
 <template>
   <div>
-    <div class="mb-6">
-      <h1 class="text-h2 font-bold text-dark">Dashboard</h1>
-      <p class="text-b4 text-mid mt-1">Welcome to your Shopify CRM dashboard</p>
-    </div>
+    <PageHeader 
+      title="Dashboard" 
+      description="Welcome to your Shopify CRM dashboard" 
+    />
 
     <!-- Error State -->
     <div v-if="dashboardStore.error" class="mb-6 bg-red-50 p-4 rounded-lg border border-red-200">
@@ -189,8 +190,8 @@ const chartOptions = {
             <p v-else class="text-3xl font-bold text-dark mt-2">{{ dashboardStore.stats?.total_users || 0 }}</p>
           </div>
           <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            <svg class="w-6 h-6 text-purple-500" fill="currentColor" viewBox="0 0 640 640">
+              <path d="M320 80C377.4 80 424 126.6 424 184C424 241.4 377.4 288 320 288C262.6 288 216 241.4 216 184C216 126.6 262.6 80 320 80zM96 152C135.8 152 168 184.2 168 224C168 263.8 135.8 296 96 296C56.2 296 24 263.8 24 224C24 184.2 56.2 152 96 152zM0 480C0 409.3 57.3 352 128 352C140.8 352 153.2 353.9 164.9 357.4C132 394.2 112 442.8 112 496L112 512C112 523.4 114.4 534.2 118.7 544L32 544C14.3 544 0 529.7 0 512L0 480zM521.3 544C525.6 534.2 528 523.4 528 512L528 496C528 442.8 508 394.2 475.1 357.4C486.8 353.9 499.2 352 512 352C582.7 352 640 409.3 640 480L640 512C640 529.7 625.7 544 608 544L521.3 544zM472 224C472 184.2 504.2 152 544 152C583.8 152 616 184.2 616 224C616 263.8 583.8 296 544 296C504.2 296 472 263.8 472 224zM160 496C160 407.6 231.6 336 320 336C408.4 336 480 407.6 480 496L480 512C480 529.7 465.7 544 448 544L192 544C174.3 544 160 529.7 160 512L160 496z"/>
             </svg>
           </div>
         </div>

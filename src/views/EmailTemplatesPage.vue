@@ -7,6 +7,7 @@ import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 
 interface EmailTemplate extends ApiEmailTemplate {
   app_name?: string;
@@ -198,10 +199,7 @@ const saveTemplate = async () => {
 
 <template>
   <div>
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-semibold text-dark">Email Templates</h1>
-    </div>
+    <PageHeader title="Email Templates" />
 
     <!-- Filter/Search Bar -->
     <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">

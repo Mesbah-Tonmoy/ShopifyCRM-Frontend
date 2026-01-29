@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 
 import { CloseIcon, PlusIcon, LoadingIcon } from '@/components/icons';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { Toast } from '@/utils/toast';
 
 const roles = ref<Role[]>([]);
@@ -184,10 +185,10 @@ onMounted(fetchInitialData);
 
 <template>
   <div>
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-dark">Permissions List</h1>
-      <p class="text-b4 text-mid mt-1">Manage user permissions</p>
-    </div>
+    <PageHeader 
+      title="Permissions List" 
+      description="Manage user permissions" 
+    />
 
     <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
       <!-- Top Active Roles and Add Button -->

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { aclService, type Role, type Permission } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
 import { EditIcon, DeleteIcon, PlusIcon, CloseIcon, LoadingIcon } from '@/components/icons';
+import PageHeader from '@/components/common/PageHeader.vue';
 import Swal from 'sweetalert2';
 import { Toast } from '@/utils/toast';
 
@@ -141,20 +142,21 @@ const deleteRole = async (id: number) => {
 
 <template>
   <div>
-    <div class="mb-6 flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-dark">Roles</h1>
-        <p class="text-b4 text-mid mt-1">Manage user roles and their associated permissions</p>
-      </div>
-      <button 
-        v-if="authStore.hasPermission('roles.add')"
-        @click="openAddModal" 
-        class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
-      >
-        <PlusIcon size="sm" />
-        Add Role
-      </button>
-    </div>
+    <PageHeader 
+      title="Roles" 
+      description="Manage user roles and their associated permissions"
+    >
+      <template #actions>
+        <button 
+          v-if="authStore.hasPermission('roles.add')"
+          @click="openAddModal" 
+          class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+        >
+          <PlusIcon size="sm" />
+          Add Role
+        </button>
+      </template>
+    </PageHeader>
 
     <div v-if="loading" class="text-center py-12 text-gray-500">Loading roles...</div>
     

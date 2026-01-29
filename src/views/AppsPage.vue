@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth';
 import { CloseIcon, DeleteIcon, PlusIcon, ChevronRight, LoadingIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import Swal from 'sweetalert2';
 
 const router = useRouter();
@@ -131,21 +132,21 @@ const handleDelete = async (id: number) => {
 
 <template>
   <div class="space-y-6">
-    <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Apps</h1>
-        <p class="text-sm text-gray-500 mt-1">Manage and connect your Shopify apps to sync data.</p>
-      </div>
-      <button
-        v-if="authStore.hasPermission('apps.add')"
-        @click="openModal"
-        class="bg-teal text-white px-4 py-2.5 rounded-lg font-medium hover:bg-teal-dark transition-all duration-200 flex items-center shadow-sm hover:shadow-md"
-      >
-        <PlusIcon size="md" class="mr-2" />
-        Connect New App
-      </button>
-    </div>
+    <PageHeader 
+      title="Apps" 
+      description="Manage and connect your Shopify apps to sync data."
+    >
+      <template #actions>
+        <button
+          v-if="authStore.hasPermission('apps.add')"
+          @click="openModal"
+          class="bg-teal text-white px-4 py-2.5 rounded-lg font-medium hover:bg-teal-dark transition-all duration-200 flex items-center shadow-sm hover:shadow-md"
+        >
+          <PlusIcon size="md" class="mr-2" />
+          Connect New App
+        </button>
+      </template>
+    </PageHeader>
 
     <!-- Apps Grid Loading -->
     <div v-if="appsStore.loading && appsStore.apps.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
