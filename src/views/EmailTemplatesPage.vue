@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import Swal from 'sweetalert2';
 import { emailTemplateService, type EmailTemplate as ApiEmailTemplate } from '@/services/emailTemplateService';
 import { useAuthStore } from '@/stores/auth';
+import { Toast } from '@/utils/toast';
 import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
@@ -57,7 +58,7 @@ const fetchTemplates = async () => {
       }));
     }
   } catch (err: any) {
-    const errorMessage = err.response?.data?.message || 'Failed to load email templates';
+    const errorMessage = err.message || 'Failed to load email templates';
     error.value = errorMessage;
     console.error('Error fetching templates:', err);
     Swal.fire({
@@ -174,18 +175,13 @@ const saveTemplate = async () => {
     closeEditModal();
 
     // Show success toast
-    Swal.fire({
+    Toast.fire({
       icon: 'success',
       title: 'Template Updated!',
-      text: 'Email template has been saved successfully.',
-      toast: true,
-      position: 'top-end',
-      showConfirmButton: false,
-      timer: 3000,
-      timerProgressBar: true,
+      text: 'Email template has been saved successfully.'
     });
   } catch (err: any) {
-    const errorMessage = err.response?.data?.message || 'Failed to update template';
+    const errorMessage = err.message || 'Failed to update template';
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -217,7 +213,7 @@ const saveTemplate = async () => {
           <SelectInput
             v-model="selectedAppId"
             label="App"
-            placeholder="All Apps"
+            placeholder="Select App"
             select-class="w-48"
           >
             <option v-for="app in uniqueApps" :key="app.id" :value="app.id">
@@ -229,7 +225,7 @@ const saveTemplate = async () => {
           <SelectInput
             v-model="selectedTemplateType"
             label="Type"
-            placeholder="All Types"
+            placeholder="Select Type"
             select-class="w-48"
           >
             <option v-for="type in uniqueTemplateTypes" :key="type.value" :value="type.value">

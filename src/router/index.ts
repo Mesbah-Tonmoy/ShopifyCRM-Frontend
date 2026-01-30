@@ -43,6 +43,13 @@ const routes = [
         path: 'pricing-plan',
         name: 'pricing-plan',
         component: () => import('@/views/PricingPlanPage.vue'),
+        meta: { permission: 'pricing_plans.view' }
+      },
+      {
+        path: 'pricing-plan/:id/features',
+        name: 'PricingPlanFeatures',
+        component: () => import('@/views/PricingPlanFeaturesPage.vue'),
+        meta: { permission: 'pricing_plans.view' }
       },
       {
         path: 'email-templates',

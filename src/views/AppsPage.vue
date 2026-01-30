@@ -3,11 +3,19 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
-import { CloseIcon, DeleteIcon, PlusIcon, ChevronRight, LoadingIcon } from '@/components/icons';
+import { 
+  PlusIcon, 
+  LoadingIcon, 
+  DeleteIcon, 
+  ShopifyIcon,
+  CloseIcon,
+  ChevronRight
+} from '@/components/icons';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Swal from 'sweetalert2';
+import { Toast } from '@/utils/toast';
 
 const router = useRouter();
 const appsStore = useAppsStore();
@@ -81,12 +89,10 @@ const handleResync = async (id: number) => {
     try {
       const success = await appsStore.resyncApp(id);
       if (success) {
-        Swal.fire({
-          title: 'Resynced!',
-          text: 'App data has been updated.',
+        Toast.fire({
           icon: 'success',
-          timer: 1500,
-          showConfirmButton: false
+          title: 'Resynced!',
+          text: 'App data has been updated.'
         });
       } else {
         Swal.fire('Error', appsStore.error || 'Failed to resync app', 'error');
@@ -113,12 +119,10 @@ const handleDelete = async (id: number) => {
     try {
       const success = await appsStore.deleteApp(id);
       if (success) {
-        Swal.fire({
-          title: 'Deleted!',
-          text: 'App has been removed.',
+        Toast.fire({
           icon: 'success',
-          timer: 1500,
-          showConfirmButton: false
+          title: 'Deleted!',
+          text: 'App has been removed.'
         });
       } else {
         Swal.fire('Error', appsStore.error || 'Failed to delete app', 'error');
@@ -190,9 +194,21 @@ const handleDelete = async (id: number) => {
           class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden flex flex-col"
         >
           <!-- Accent blur -->
-          <div class="absolute -right-4 -top-4 w-24 h-24 bg-teal/5 rounded-full blur-2xl group-hover:bg-teal/10 transition-colors"></div>
+          <div v-if="app.app_store_url" class="absolute -right-4 -top-4 w-24 h-24 bg-teal/50 rounded-full blur-2xl group-hover:bg-teal/70 transition-colors"></div>
           
           <div class="relative flex-1">
+            <!-- Shopify App Store Link -->
+            <a 
+              v-if="app.app_store_url" 
+              :href="app.app_store_url" 
+              target="_blank" 
+              class="absolute top-0 right-0 z-10 p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-[#000000] hover:shadow-lg scale-105 transition-all duration-200"
+              title="View on Shopify App Store"
+              @click.stop
+            >
+              <ShopifyIcon size="md" />
+            </a>
+          
             <div class="flex items-start justify-between">
               <div class="flex items-center space-x-4">
                 <div v-if="app.icon" class="w-14 h-14 rounded-xl overflow-hidden shadow-sm border border-gray-50 bg-gray-50 flex-shrink-0">
