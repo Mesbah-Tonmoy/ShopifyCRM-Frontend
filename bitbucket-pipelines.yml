@@ -9,6 +9,11 @@ pipelines:
           caches:
             - node
           script:
+            - export VITE_BACKEND_URL=$BACKEND_URL
+            - export VITE_REVERB_APP_KEY=$REVERB_APP_KEY
+            - export VITE_REVERB_HOST=$REVERB_HOST
+            - export VITE_REVERB_PORT=$REVERB_PORT
+            - export VITE_REVERB_SCHEME=$REVERB_SCHEME
             - npm ci
             - npm run build
             - pipe: atlassian/rsync-deploy:0.13.0
