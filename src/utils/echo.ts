@@ -9,10 +9,16 @@ declare global {
 
 window.Pusher = Pusher;
 
+const appKey = import.meta.env.VITE_REVERB_APP_KEY;
+
+if (!appKey) {
+    console.error('VITE_REVERB_APP_KEY is not defined. Please check your .env file and rebuild the frontend.');
+}
+
 const echo = new Echo({
     broadcaster: 'reverb',
-    key: import.meta.env.VITE_REVERB_APP_KEY,
-    wsHost: import.meta.env.VITE_REVERB_HOST,
+    key: appKey,
+    wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
     wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
     wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
@@ -21,7 +27,15 @@ const echo = new Echo({
         return {
             authorize: (socketId: string, callback: any) => {
                 const token = localStorage.getItem('token');
-                fetch(`${import.meta.env.VITE_BACKEND_URL}/api/broadcasting/auth`, {
+                const backendUrl = import.meta.env.VITE_BACKEND_URL;
+                
+                if (!backendUrl) {
+                    console.error('VITE_BACKEND_URL is not defined.');
+                    callback(true, 'Backend URL missing');
+                    return;
+                }
+
+                fetch(`${backendUrl}/api/broadcasting/auth`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -38,6 +52,7 @@ const echo = new Echo({
                     callback(false, data);
                 })
                 .catch(error => {
+                    console.error('Broadcast authorization failed:', error);
                     callback(true, error);
                 });
             }
