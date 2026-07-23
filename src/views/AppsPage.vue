@@ -191,7 +191,7 @@ const handleDelete = async (id: number) => {
         <div
           v-for="app in appsStore.apps"
           :key="app.id"
-          class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden flex flex-col"
+          class="bg-white border border-gray-100 rounded-lg p-6 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden flex flex-col"
         >
           <!-- Accent blur -->
           <div v-if="app.app_store_url" class="absolute -right-4 -top-4 w-24 h-24 bg-teal/50 rounded-full blur-2xl group-hover:bg-teal/70 transition-colors"></div>

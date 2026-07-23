@@ -52,6 +52,12 @@ const routes = [
         meta: { permission: 'pricing_plans.view' }
       },
       {
+        path: 'integrations',
+        name: 'integrations',
+        component: () => import('@/views/IntegrationsPage.vue'),
+        meta: { permission: 'integrations.view' }
+      },
+      {
         path: 'email-templates',
         name: 'email-templates',
         component: () => import('@/views/EmailTemplatesPage.vue'),
