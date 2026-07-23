@@ -189,7 +189,7 @@ const save = async (key: string) => {
             <input
               type="checkbox"
               class="sr-only peer"
-              :checked="formState[meta.key].is_enabled"
+              :checked="formState[meta.key]!.is_enabled"
               @change="toggleEnabled(meta.key)"
               :disabled="!authStore.hasPermission('integrations.edit')"
             />
@@ -205,7 +205,7 @@ const save = async (key: string) => {
               :id="`${meta.key}-${field.key}`"
               :name="`${meta.key}-${field.key}`"
               :type="field.type"
-              v-model="formState[meta.key].config[field.key]"
+              v-model="formState[meta.key]!.config[field.key]"
               :placeholder="field.placeholder"
               :disabled="!authStore.hasPermission('integrations.edit')"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal focus:border-transparent disabled:bg-gray-50"
