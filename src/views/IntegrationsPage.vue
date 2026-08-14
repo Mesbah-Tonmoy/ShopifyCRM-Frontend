@@ -19,7 +19,6 @@ interface IntegrationMeta {
   title: string;
   description: string;
   fields: IntegrationField[];
-  iconBg: string;
 }
 
 const INTEGRATIONS_META: IntegrationMeta[] = [
@@ -27,29 +26,30 @@ const INTEGRATIONS_META: IntegrationMeta[] = [
     key: 'slack',
     title: 'Slack',
     description: 'Send a message to a Slack channel whenever a store\'s pricing plan changes.',
-    iconBg: 'bg-[#f4ede4]',
     fields: [
       { key: 'webhook_url', label: 'Incoming Webhook URL', type: 'text', placeholder: 'https://hooks.slack.com/services/...' },
     ],
   },
-  {
-    key: 'gmail',
-    title: 'Gmail',
-    description: 'Send transactional emails through a Gmail account.',
-    iconBg: 'bg-red-50',
-    fields: [
-      { key: 'client_email', label: 'Gmail Address', type: 'text', placeholder: 'you@gmail.com' },
-      { key: 'app_password', label: 'App Password', type: 'password' },
-    ],
-  },
+  // {
+  //   key: 'gmail',
+  //   title: 'Gmail',
+  //   description: 'Send transactional emails through a Gmail account.',
+  //   fields: [
+  //     { key: 'client_email', label: 'Gmail Address', type: 'text', placeholder: 'you@gmail.com' },
+  //     { key: 'app_password', label: 'App Password', type: 'password' },
+  //   ],
+  // },
   {
     key: 'sendgrid',
     title: 'SendGrid',
     description: 'Send transactional emails through SendGrid.',
-    iconBg: 'bg-blue-50',
     fields: [
       { key: 'api_key', label: 'API Key', type: 'password' },
       { key: 'from_email', label: 'From Email', type: 'text', placeholder: 'no-reply@yourapp.com' },
+      { key: 'from_name', label: 'From Name', type: 'text', placeholder: 'Shopify CRM' },
+      { key: 'reply_to', label: 'Reply-To', type: 'text', placeholder: 'support@yourapp.com' },
+      { key: 'cc', label: 'CC (comma separated)', type: 'text', placeholder: 'a@yourapp.com, b@yourapp.com' },
+      { key: 'bcc', label: 'BCC (comma separated)', type: 'text', placeholder: 'audit@yourapp.com' },
     ],
   },
 ];
@@ -142,7 +142,7 @@ const save = async (key: string) => {
 
 <template>
   <div>
-    <PageHeader title="Integrations" description="Connect Slack, Gmail, and SendGrid to this app" />
+    <PageHeader title="Integrations" description="Connect Slack and SendGrid to this app" />
 
     <div v-if="loading" class="flex justify-center py-12">
       <LoadingIcon size="md" />
@@ -163,13 +163,13 @@ const save = async (key: string) => {
                 <path d="M21.6349 10.5317C21.6349 8.9973 22.8741 7.75717 24.4073 7.75717C25.9404 7.75717 27.1796 8.9973 27.1796 10.5317C27.1796 12.0661 25.9404 13.3062 24.4073 13.3062H21.6349V10.5317ZM20.2488 10.5317C20.2488 12.0661 19.0096 13.3062 17.4764 13.3062C15.9432 13.3062 14.7041 12.0661 14.7041 10.5317V3.57434C14.7041 2.03994 15.9432 0.799805 17.4764 0.799805C19.0096 0.799805 20.2488 2.03994 20.2488 3.57434V10.5317Z" fill="#2EB67D"/>
                 <path d="M17.4764 21.6507C19.0096 21.6507 20.2488 22.8908 20.2488 24.4252C20.2488 25.9596 19.0096 27.1998 17.4764 27.1998C15.9432 27.1998 14.7041 25.9596 14.7041 24.4252V21.6507H17.4764ZM17.4764 20.2634C15.9432 20.2634 14.7041 19.0233 14.7041 17.4889C14.7041 15.9545 15.9432 14.7144 17.4764 14.7144H24.4283C25.9614 14.7144 27.2006 15.9545 27.2006 17.4889C27.2006 19.0233 25.9614 20.2634 24.4283 20.2634H17.4764Z" fill="#ECB22E"/>
               </svg>
-              <svg v-else-if="meta.key === 'gmail'" width="30" height="23" viewBox="0 0 30 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- <svg v-else-if="meta.key === 'gmail'" width="30" height="23" viewBox="0 0 30 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M0 5.87891V20.4445C0 22.148 0.833341 22.9998 2.50002 22.9998H6.8334V5.87891" fill="#4285F4"/>
                 <path d="M23.167 5.87891V22.9998H27.5004C29.167 22.9998 30.0004 22.148 30.0004 20.4445V5.87891" fill="#34A853"/>
                 <path d="M22.833 11.4149V2.386L25.1664 0.597249C27.1664 -0.935969 29.9997 0.767606 29.9997 3.15261V5.87833" fill="#FBBC04"/>
                 <path d="M6.49902 10.9049V1.87598L14.9991 8.43474L23.1658 2.13151V11.1605L14.9991 17.4637" fill="#EA4335"/>
                 <path d="M0 5.879V3.15328C0 0.683095 2.83336 -0.935302 4.83338 0.597916L6.8334 2.13113V11.1601" fill="#C5221F"/>
-              </svg>
+              </svg> -->
               <svg v-else width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M29.9999 0V20H20V29.9995H0.00023566L0.000234374 19.9998L0 20V9.99974H9.99998V0H29.9999Z" fill="#9DD6E3"/>
                 <path d="M0 29.999H9.99998V19.999H0V29.999Z" fill="#3F72AB"/>
