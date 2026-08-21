@@ -12,6 +12,7 @@ interface IntegrationField {
   label: string;
   type: 'text' | 'password';
   placeholder?: string;
+  required?: boolean;
 }
 
 interface IntegrationMeta {
@@ -19,7 +20,6 @@ interface IntegrationMeta {
   title: string;
   description: string;
   fields: IntegrationField[];
-  iconBg: string;
 }
 
 const INTEGRATIONS_META: IntegrationMeta[] = [
@@ -27,29 +27,45 @@ const INTEGRATIONS_META: IntegrationMeta[] = [
     key: 'slack',
     title: 'Slack',
     description: 'Send a message to a Slack channel whenever a store\'s pricing plan changes.',
-    iconBg: 'bg-[#f4ede4]',
     fields: [
       { key: 'webhook_url', label: 'Incoming Webhook URL', type: 'text', placeholder: 'https://hooks.slack.com/services/...' },
     ],
   },
-  {
-    key: 'gmail',
-    title: 'Gmail',
-    description: 'Send transactional emails through a Gmail account.',
-    iconBg: 'bg-red-50',
-    fields: [
-      { key: 'client_email', label: 'Gmail Address', type: 'text', placeholder: 'you@gmail.com' },
-      { key: 'app_password', label: 'App Password', type: 'password' },
-    ],
-  },
+  // {
+  //   key: 'gmail',
+  //   title: 'Gmail',
+  //   description: 'Send transactional emails through a Gmail account.',
+  //   fields: [
+  //     { key: 'client_email', label: 'Gmail Address', type: 'text', placeholder: 'you@gmail.com' },
+  //     { key: 'app_password', label: 'App Password', type: 'password' },
+  //   ],
+  // },
   {
     key: 'sendgrid',
     title: 'SendGrid',
     description: 'Send transactional emails through SendGrid.',
-    iconBg: 'bg-blue-50',
     fields: [
-      { key: 'api_key', label: 'API Key', type: 'password' },
-      { key: 'from_email', label: 'From Email', type: 'text', placeholder: 'no-reply@yourapp.com' },
+      { key: 'api_key', label: 'API Key', type: 'password', required: true },
+      { key: 'from_email', label: 'From Email', type: 'text', placeholder: 'no-reply@yourapp.com', required: true },
+      { key: 'from_name', label: 'From Name', type: 'text', placeholder: 'Shopify CRM' },
+      { key: 'reply_to', label: 'Reply-To', type: 'text', placeholder: 'support@yourapp.com' },
+      { key: 'cc', label: 'CC (comma separated)', type: 'text', placeholder: 'a@yourapp.com, b@yourapp.com' },
+      { key: 'bcc', label: 'BCC (comma separated)', type: 'text', placeholder: 'audit@yourapp.com' },
+    ],
+  },
+  {
+    key: 'mailtrap',
+    title: 'Mailtrap',
+    description: 'Send transactional emails through Mailtrap SMTP.',
+    fields: [
+      { key: 'username', label: 'SMTP Username', type: 'text', required: true },
+      { key: 'password', label: 'SMTP Password', type: 'password', required: true },
+      { key: 'host', label: 'SMTP Host', type: 'text', placeholder: 'live.smtp.mailtrap.io' },
+      { key: 'from_email', label: 'From Email', type: 'text', placeholder: 'no-reply@yourapp.com', required: true },
+      { key: 'from_name', label: 'From Name', type: 'text', placeholder: 'Shopify CRM' },
+      { key: 'reply_to', label: 'Reply-To', type: 'text', placeholder: 'support@yourapp.com' },
+      { key: 'cc', label: 'CC (comma separated)', type: 'text', placeholder: 'a@yourapp.com, b@yourapp.com' },
+      { key: 'bcc', label: 'BCC (comma separated)', type: 'text', placeholder: 'audit@yourapp.com' },
     ],
   },
 ];
@@ -88,15 +104,41 @@ const fetchIntegrations = async () => {
 
 onMounted(fetchIntegrations);
 
-const toggleEnabled = async (key: string) => {
+const getMissingRequiredFields = (key: string): IntegrationField[] => {
+  const meta = INTEGRATIONS_META.find((m) => m.key === key);
+  const state = formState.value[key];
+  if (!meta || !state) return [];
+  return meta.fields.filter((field) => field.required && !String(state.config[field.key] ?? '').trim());
+};
+
+const toggleEnabled = async (key: string, event: Event) => {
   const state = formState.value[key];
   if (!state) return;
 
+  const turningOn = !state.is_enabled;
+
+  // Enabling requires all mandatory fields to be filled in first; disabling never does.
+  if (turningOn) {
+    const missing = getMissingRequiredFields(key);
+    if (missing.length) {
+      // the native checkbox already flipped itself on click; revert it since state isn't changing
+      (event.target as HTMLInputElement).checked = state.is_enabled;
+      const meta = INTEGRATIONS_META.find((m) => m.key === key);
+      Swal.fire({
+        icon: 'warning',
+        title: 'Missing required fields',
+        text: `Fill in the following before enabling ${meta?.title ?? key}: ${missing.map((f) => f.label).join(', ')}`,
+      });
+      return;
+    }
+  }
+
   // optimistic flip, revert on failure
-  state.is_enabled = !state.is_enabled;
+  state.is_enabled = turningOn;
 
   try {
-    const response = await integrationService.update(key, { is_enabled: state.is_enabled });
+    // send config along so values typed but not yet saved persist together with the enable action
+    const response = await integrationService.update(key, { is_enabled: state.is_enabled, config: state.config });
     if (response.success) {
       integrations.value[key] = response.data;
       Toast.fire({
@@ -109,7 +151,7 @@ const toggleEnabled = async (key: string) => {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: err.message || 'Failed to update integration status',
+      text: err.response?.data?.message || err.message || 'Failed to update integration status',
     });
   }
 };
@@ -132,7 +174,7 @@ const save = async (key: string) => {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: err.message || 'Failed to save integration',
+      text: err.response?.data?.message || err.message || 'Failed to save integration',
     });
   } finally {
     saving.value = null;
@@ -142,7 +184,7 @@ const save = async (key: string) => {
 
 <template>
   <div>
-    <PageHeader title="Integrations" description="Connect Slack, Gmail, and SendGrid to this app" />
+    <PageHeader title="Integrations" description="Connect Slack, SendGrid, and Mailtrap to this app" />
 
     <div v-if="loading" class="flex justify-center py-12">
       <LoadingIcon size="md" />
@@ -163,20 +205,23 @@ const save = async (key: string) => {
                 <path d="M21.6349 10.5317C21.6349 8.9973 22.8741 7.75717 24.4073 7.75717C25.9404 7.75717 27.1796 8.9973 27.1796 10.5317C27.1796 12.0661 25.9404 13.3062 24.4073 13.3062H21.6349V10.5317ZM20.2488 10.5317C20.2488 12.0661 19.0096 13.3062 17.4764 13.3062C15.9432 13.3062 14.7041 12.0661 14.7041 10.5317V3.57434C14.7041 2.03994 15.9432 0.799805 17.4764 0.799805C19.0096 0.799805 20.2488 2.03994 20.2488 3.57434V10.5317Z" fill="#2EB67D"/>
                 <path d="M17.4764 21.6507C19.0096 21.6507 20.2488 22.8908 20.2488 24.4252C20.2488 25.9596 19.0096 27.1998 17.4764 27.1998C15.9432 27.1998 14.7041 25.9596 14.7041 24.4252V21.6507H17.4764ZM17.4764 20.2634C15.9432 20.2634 14.7041 19.0233 14.7041 17.4889C14.7041 15.9545 15.9432 14.7144 17.4764 14.7144H24.4283C25.9614 14.7144 27.2006 15.9545 27.2006 17.4889C27.2006 19.0233 25.9614 20.2634 24.4283 20.2634H17.4764Z" fill="#ECB22E"/>
               </svg>
-              <svg v-else-if="meta.key === 'gmail'" width="30" height="23" viewBox="0 0 30 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- <svg v-else-if="meta.key === 'gmail'" width="30" height="23" viewBox="0 0 30 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M0 5.87891V20.4445C0 22.148 0.833341 22.9998 2.50002 22.9998H6.8334V5.87891" fill="#4285F4"/>
                 <path d="M23.167 5.87891V22.9998H27.5004C29.167 22.9998 30.0004 22.148 30.0004 20.4445V5.87891" fill="#34A853"/>
                 <path d="M22.833 11.4149V2.386L25.1664 0.597249C27.1664 -0.935969 29.9997 0.767606 29.9997 3.15261V5.87833" fill="#FBBC04"/>
                 <path d="M6.49902 10.9049V1.87598L14.9991 8.43474L23.1658 2.13151V11.1605L14.9991 17.4637" fill="#EA4335"/>
                 <path d="M0 5.879V3.15328C0 0.683095 2.83336 -0.935302 4.83338 0.597916L6.8334 2.13113V11.1601" fill="#C5221F"/>
-              </svg>
-              <svg v-else width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              </svg> -->
+              <svg v-else-if="meta.key === 'sendgrid'" width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M29.9999 0V20H20V29.9995H0.00023566L0.000234374 19.9998L0 20V9.99974H9.99998V0H29.9999Z" fill="#9DD6E3"/>
                 <path d="M0 29.999H9.99998V19.999H0V29.999Z" fill="#3F72AB"/>
                 <path d="M20 20.0002H30V10H20V20.0002Z" fill="#00A9D1"/>
                 <path d="M10 9.99998H20V0H10V9.99998Z" fill="#00A9D1"/>
                 <path d="M10 20H20V10H10V20Z" fill="#2191C4"/>
                 <path d="M20 9.99998H30V0H20V9.99998Z" fill="#3F72AB"/>
+              </svg>
+              <svg v-else-if="meta.key === 'mailtrap'" fill="#22D172" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5.37146 17.60681 3.33477 18.8148c-.27629.18168-.15004.49398 0 .55693l7.90979 4.43194c.46722.26178 1.04287.26178 1.51009 0l8.01458-4.49068c.24282-.14382.20298-.43614 0-.53479l-2.15348-1.16353c-.18174-.11994-.58711-.08004-.73069.01758l-5.13041 2.87463c-.46722.26178-1.04287.26178-1.51009 0l-5.17584-2.90007c-.19295-.11868-.4986-.11196-.69726 0ZM11.24492.19634c.46722-.26179 1.04281-.26179 1.51003 0l6.36966 3.56896c.25428.12865.27732.47404 0 .62979-.41988.23442-.98311.54855-1.45045.80916-.54595.30446-1.21057.30357-1.75592-.00201l-3.16329-1.7724c-.46722-.26179-1.04281-.26179-1.51003 0l-3.16701 1.7745c-.54577.30577-1.21096.30634-1.75727.00163-.48583-.27097-1.07519-.59951-1.49988-.83566-.23557-.10117-.28461-.40149 0-.57448L11.24492.19634Zm10.72402 5.37209c.46723.26179.75505.74561.75505 1.26917v10.32526c0 .51102-.32004.60637-.66139.42786l-2.3588-1.27315V9.37593l-6.94878 3.8935c-.46722.26178-1.04281.26178-1.51003 0l-6.94881-3.8935v6.9408L2.1528 17.58922c-.25545.16242-.87679.2136-.87679-.42636V6.8376c0-.52356.28782-1.00739.75504-1.26917.75174-.39366 1.52849 0 1.52849 0l8.44043 4.73955 8.42726-4.73955s.74839-.45137 1.54171 0Z"/>
               </svg>
             </div>
             <div>
@@ -190,7 +235,7 @@ const save = async (key: string) => {
               type="checkbox"
               class="sr-only peer"
               :checked="formState[meta.key]!.is_enabled"
-              @change="toggleEnabled(meta.key)"
+              @change="toggleEnabled(meta.key, $event)"
               :disabled="!authStore.hasPermission('integrations.edit')"
             />
             <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-teal transition-colors"></div>
@@ -200,7 +245,9 @@ const save = async (key: string) => {
 
         <div v-if="formState[meta.key]" class="space-y-3 mt-4">
           <div v-for="field in meta.fields" :key="field.key">
-            <label :for="`${meta.key}-${field.key}`" class="block text-sm font-medium text-gray-600 mb-1">{{ field.label }}</label>
+            <label :for="`${meta.key}-${field.key}`" class="block text-sm font-medium text-gray-600 mb-1">
+              {{ field.label }}<span v-if="field.required" class="text-red-500"> *</span>
+            </label>
             <input
               :id="`${meta.key}-${field.key}`"
               :name="`${meta.key}-${field.key}`"
