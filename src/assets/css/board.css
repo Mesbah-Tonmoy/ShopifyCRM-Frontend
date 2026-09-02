@@ -1,0 +1,580 @@
+/*
+ * Theme tokens for the merchant-facing feature board.
+ *
+ * The board renders in its own iframe inside the Shopify admin, so nothing
+ * cascades in from the host page — Polaris' own custom properties included.
+ * These values are therefore copied out of @shopify/polaris-tokens 9.4.2 rather
+ * than referenced, and each one names the token it came from so a future
+ * release can be diffed against them.
+ *
+ * The palette is declared once per theme, keyed off `data-theme`, which
+ * BoardLayout always stamps after resolving the stored choice against the OS
+ * preference. Doing the resolution in script keeps one place to edit a colour,
+ * instead of repeating the whole dark set behind a prefers-color-scheme query.
+ */
+
+.board-root {
+    /* Surfaces */
+    --bd-ground: #f1f1f1; /* --p-color-bg */
+    --bd-surface: #ffffff; /* --p-color-bg-surface */
+    --bd-raised: #f7f7f7; /* --p-color-bg-surface-secondary */
+    --bd-sunken: #f3f3f3; /* --p-color-bg-surface-tertiary */
+    --bd-border: #e3e3e3; /* --p-color-border */
+    --bd-border-strong: #cccccc; /* --p-color-border-hover */
+
+    /* Type */
+    --bd-ink: #303030; /* --p-color-text */
+    --bd-ink-mid: #616161; /* --p-color-text-secondary */
+    --bd-ink-soft: #8a8a8a; /* --p-color-icon-secondary */
+
+    /*
+     * Primary action. Polaris fills these near-black rather than with a brand
+     * hue, so `--bd-accent` is a fill colour and never a text colour — pair it
+     * with `--bd-accent-on`, which inverts with the theme.
+     */
+    --bd-accent: #303030; /* --p-color-bg-fill-brand */
+    --bd-accent-hover: #1a1a1a; /* --p-color-bg-fill-brand-hover */
+    --bd-accent-on: #ffffff; /* --p-color-text-brand-on-bg-fill */
+
+    /* Interactive text and selected states read blue, not black. */
+    --bd-link: #005bd3; /* --p-color-text-emphasis */
+    --bd-accent-wash: #eaf4ff; /* --p-color-bg-surface-info */
+    --bd-accent-line: #a8d8ff; /* --p-color-border-info */
+    --bd-focus: #005bd3; /* --p-color-border-focus */
+    --bd-success: #047b5d; /* --p-color-bg-fill-success */
+
+    /* Form controls. Polaris gives them their own surface and a border darker
+       than a card's, so they read as editable rather than as panels. */
+    --bd-input-bg: #fdfdfd; /* --p-color-input-bg-surface */
+    --bd-input-bg-hover: #fafafa; /* --p-color-input-bg-surface-hover */
+    --bd-input-bg-active: #f7f7f7; /* --p-color-input-bg-surface-active */
+    --bd-input-border: #8a8a8a; /* --p-color-input-border */
+    --bd-input-border-hover: #616161; /* --p-color-input-border-hover */
+    --bd-input-border-active: #1a1a1a; /* --p-color-input-border-active */
+
+    /* Polaris draws button edges with inset shadow, not a border. */
+    --bd-btn-secondary-bg: #ffffff; /* --p-color-bg-fill */
+    --bd-btn-secondary-bg-hover: #fafafa; /* --p-color-bg-fill-hover */
+    --bd-btn-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0, 0, 0, 0.1) inset,
+        0 0.5px 0 1.5px #ffffff inset; /* --p-shadow-button */
+    --bd-btn-primary-shadow: 0 -1px 0 1px rgba(0, 0, 0, 0.8) inset, 0 0 0 1px #303030 inset,
+        0 0.5px 0 1.5px rgba(255, 255, 255, 0.25) inset; /* --p-shadow-button-primary */
+    --bd-modal-shadow: 0 20px 20px -8px rgba(26, 26, 26, 0.28); /* --p-shadow-600 */
+
+    /* Status. Neutral, info, caution, success, critical — in that order. */
+    --bd-pending: #616161; /* --p-color-text-secondary */
+    --bd-pending-wash: #f1f1f1; /* --p-color-bg */
+    --bd-approved: #003a5a; /* --p-color-text-info */
+    --bd-approved-wash: #eaf4ff; /* --p-color-bg-surface-info */
+    --bd-progress: #4f4700; /* --p-color-text-caution */
+    --bd-progress-wash: #fff8db; /* --p-color-bg-surface-caution */
+    --bd-done: #014b40; /* --p-color-text-success */
+    --bd-done-wash: #cdfed4; /* --p-color-bg-surface-success */
+    --bd-rejected: #8e0b21; /* --p-color-text-critical */
+    --bd-rejected-wash: #fee8eb; /* --p-color-bg-surface-critical */
+
+    /*
+     * Tone aliases. Polaris uses the same four colour pairs for badges,
+     * banners and statuses, so these point at the status tokens above rather
+     * than repeating their values — including through a theme switch, since a
+     * var() reference resolves where it is used.
+     */
+    --bd-info: var(--bd-approved);
+    --bd-info-wash: var(--bd-approved-wash);
+    --bd-caution: var(--bd-progress);
+    --bd-caution-wash: var(--bd-progress-wash);
+    --bd-positive: var(--bd-done);
+    --bd-positive-wash: var(--bd-done-wash);
+    --bd-critical: var(--bd-rejected);
+    --bd-critical-wash: var(--bd-rejected-wash);
+
+    --bd-badge-bg: rgba(0, 0, 0, 0.06); /* --p-color-bg-fill-transparent-secondary */
+
+    /* The toast is inverse in both themes, which is what Polaris does. */
+    --bd-toast-bg: #1a1a1a; /* --p-color-bg-inverse */
+    --bd-toast-ink: #e3e3e3; /* --p-color-text-inverse */
+    --bd-toast-shadow: 0 8px 16px -4px rgba(26, 26, 26, 0.22); /* --p-shadow-400 */
+
+    --bd-shadow-sm: 0 1px 0 0 rgba(26, 26, 26, 0.07); /* --p-shadow-100 */
+    --bd-shadow-md: 0 4px 6px -2px rgba(26, 26, 26, 0.2); /* --p-shadow-300 */
+
+    /*
+     * --p-font-family-sans. Inter is self-hosted as a variable font, imported
+     * alongside this sheet in BoardLayout so it only loads on board pages.
+     * It has to be a variable font: the weights below are Polaris' 550 and
+     * 650, which no static face carries — a fallback rounds them up and every
+     * button and title renders a step bolder than the admin around it.
+     *
+     * `Inter` follows `Inter Variable` so a locally installed copy still
+     * answers if the download fails.
+     */
+    font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'San Francisco',
+        'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bd-ground);
+    color: var(--bd-ink);
+    min-height: 100vh;
+}
+
+/*
+ * Polaris' dark theme is still marked experimental and defines only part of the
+ * palette, so the entries it does carry are used verbatim and the rest are
+ * derived to sit alongside them. Only the standalone board can reach this — an
+ * embedded board is pinned to light, which is what the admin renders.
+ */
+.board-root[data-theme='dark'] {
+    --bd-ground: #1a1a1a; /* --p-color-bg */
+    --bd-surface: #303030; /* --p-color-bg-surface */
+    --bd-raised: #4a4a4a; /* --p-color-bg-surface-hover */
+    --bd-sunken: #262626; /* derived */
+    --bd-border: #4a4a4a; /* --p-color-border-secondary */
+    --bd-border-strong: #616161; /* derived */
+
+    --bd-ink: #e3e3e3; /* --p-color-text */
+    --bd-ink-mid: #b5b5b5; /* --p-color-text-secondary */
+    --bd-ink-soft: #8a8a8a; /* derived */
+
+    --bd-accent: #ffffff; /* --p-color-bg-fill-brand */
+    --bd-accent-hover: #f3f3f3; /* --p-color-bg-fill-brand-hover */
+    --bd-accent-on: #303030; /* --p-color-text-brand-on-bg-fill */
+
+    --bd-link: #a8d8ff; /* derived */
+    --bd-accent-wash: #002d55; /* derived */
+    --bd-accent-line: #00437f; /* derived */
+    --bd-focus: #a8d8ff; /* derived */
+    --bd-success: #29845a; /* derived */
+
+    --bd-input-bg: #383838; /* derived */
+    --bd-input-bg-hover: #414141; /* derived */
+    --bd-input-bg-active: #4a4a4a; /* derived */
+    --bd-input-border: #616161; /* derived */
+    --bd-input-border-hover: #8a8a8a; /* derived */
+    --bd-input-border-active: #e3e3e3; /* derived */
+
+    --bd-btn-secondary-bg: #4a4a4a; /* derived */
+    --bd-btn-secondary-bg-hover: #545454; /* derived */
+    --bd-btn-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset; /* derived */
+    --bd-btn-primary-shadow: none; /* derived */
+    --bd-modal-shadow: 0 20px 20px -8px rgba(0, 0, 0, 0.5); /* derived */
+
+    --bd-pending: #b5b5b5; /* derived */
+    --bd-pending-wash: #3a3a3a; /* derived */
+    --bd-approved: #a8d8ff; /* derived */
+    --bd-approved-wash: #002d55; /* derived */
+    --bd-progress: #ffe600; /* --p-color-bg-fill-caution */
+    --bd-progress-wash: #3d3800; /* derived */
+    --bd-done: #92fcac; /* --p-color-border-success */
+    --bd-done-wash: #003d33; /* derived */
+    --bd-rejected: #fec1c7; /* --p-color-border-critical */
+    --bd-rejected-wash: #4a0b16; /* derived */
+
+    --bd-badge-bg: rgba(255, 255, 255, 0.08); /* derived */
+
+    --bd-shadow-sm: 0 1px 0 0 rgba(0, 0, 0, 0.35);
+    --bd-shadow-md: 0 4px 6px -2px rgba(0, 0, 0, 0.45);
+}
+
+/* Status colours resolved from one place, mirroring StatusChip in the admin UI. */
+.board-root [data-status='pending'] {
+    --bd-status: var(--bd-pending);
+    --bd-status-wash: var(--bd-pending-wash);
+}
+.board-root [data-status='approved'] {
+    --bd-status: var(--bd-approved);
+    --bd-status-wash: var(--bd-approved-wash);
+}
+.board-root [data-status='in_progress'] {
+    --bd-status: var(--bd-progress);
+    --bd-status-wash: var(--bd-progress-wash);
+}
+.board-root [data-status='completed'] {
+    --bd-status: var(--bd-done);
+    --bd-status-wash: var(--bd-done-wash);
+}
+.board-root [data-status='rejected'] {
+    --bd-status: var(--bd-rejected);
+    --bd-status-wash: var(--bd-rejected-wash);
+}
+
+.board-root ::selection {
+    background: var(--bd-accent-wash);
+}
+
+.board-root :focus-visible {
+    outline: 2px solid var(--bd-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.board-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.board-scroll::-webkit-scrollbar-track {
+    background: var(--bd-sunken);
+    border-radius: 8px;
+}
+.board-scroll::-webkit-scrollbar-thumb {
+    background: var(--bd-border-strong);
+    border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .board-root * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/*
+ * Meta under a request: the status chip stands on its own line, with the
+ * request's provenance — store, date, comment count — on the next.
+ */
+.board-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--bd-ink-soft);
+}
+
+.board-meta__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Tight line boxes keep every item centred against its neighbours. */
+.board-meta__line > * {
+    line-height: 1;
+}
+
+/*
+ * Separators are drawn between items rather than written into the markup, so a
+ * request with no store name cannot open with a stray dot. Drawn rather than a
+ * "·" glyph, which sits off-centre and is barely visible at 12px, and coloured
+ * from the line so it stays neutral next to a coloured item.
+ */
+.board-meta__line > * + *::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    margin-right: 0.5rem;
+    border-radius: 9999px;
+    background: var(--bd-ink-soft);
+    opacity: 0.55;
+    vertical-align: middle;
+}
+
+/*
+ * Buttons, sized from Polaris' medium variant: a 32px control, 8px radius and
+ * 13px/20px medium type. Polaris paints the secondary edge with an inset
+ * shadow rather than a border, which is why neither variant declares one.
+ */
+.board-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 32px; /* --p-height-800 */
+    padding: 6px 12px; /* --p-space-150 / --p-space-300 */
+    border: none;
+    border-radius: 8px; /* --p-border-radius-200 */
+    font-size: 14px; /* --p-font-size-350, body-sm below the breakpoint */
+    font-weight: 550; /* --p-font-weight-medium */
+    line-height: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+@media (min-width: 48em) {
+    .board-btn {
+        min-height: 28px; /* --p-height-700 */
+        font-size: 12px; /* --p-font-size-300 */
+        line-height: 16px;
+    }
+}
+
+.board-btn:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.board-btn--primary {
+    background: var(--bd-accent);
+    box-shadow: var(--bd-btn-primary-shadow);
+    color: var(--bd-accent-on);
+}
+
+.board-btn--primary:hover:not(:disabled) {
+    background: var(--bd-accent-hover);
+}
+
+.board-btn--secondary {
+    background: var(--bd-btn-secondary-bg);
+    box-shadow: var(--bd-btn-shadow);
+    color: var(--bd-ink);
+}
+
+.board-btn--secondary:hover:not(:disabled) {
+    background: var(--bd-btn-secondary-bg-hover);
+}
+
+/*
+ * Modal chrome, matching Polaris': a tinted header strip and a plain footer,
+ * both 16px and separated from the body by a hairline, with the body the only
+ * region that scrolls.
+ */
+.board-modal {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 620px; /* 38.75rem, Polaris' default dialog */
+    overflow: hidden;
+    border-radius: 16px; /* --p-border-radius-400 */
+    background: var(--bd-surface);
+    box-shadow: var(--bd-modal-shadow);
+}
+
+.board-modal__header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 16px;
+    padding: 16px; /* --p-space-400 */
+    border-bottom: 1px solid var(--bd-border);
+    background: var(--bd-sunken); /* --p-color-bg-surface-tertiary */
+}
+
+.board-modal__title {
+    flex: 1 1 auto;
+    font-size: 14px; /* --p-font-size-350 */
+    font-weight: 650; /* --p-font-weight-semibold */
+    line-height: 20px;
+}
+
+.board-modal__close {
+    display: grid;
+    flex: none;
+    place-items: center;
+    padding: 4px; /* --p-space-100, Polaris' icon-only inset */
+    /*
+     * Pulled back out again. Without this the 28px button sets the header's
+     * height instead of the 20px title, and the bar sits noticeably taller
+     * than Polaris'.
+     */
+    margin: -4px;
+    border-radius: 8px;
+    color: var(--bd-ink);
+}
+
+.board-modal__close:hover {
+    background: var(--bd-raised);
+}
+
+.board-modal__body {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.board-modal__footer {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px; /* --p-space-200 */
+    padding: 16px;
+    border-top: 1px solid var(--bd-border);
+}
+
+/* Field label: Polaris sets these in plain body type, not small caps. */
+.board-field {
+    display: block;
+    margin-bottom: 4px; /* --p-space-100 */
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--bd-ink);
+}
+
+/*
+ * Text controls, sized and coloured from Polaris' own Select and TextField:
+ * 8px radius, 13px/20px type, a 32px control height and the input border above.
+ * BoardSelect carries the matching dropdown.
+ */
+.board-input {
+    min-height: 32px; /* --pg-control-height */
+    padding: 6px 12px; /* --p-space-150 / --p-space-300 */
+    border: 1px solid var(--bd-input-border);
+    border-radius: 8px; /* --p-border-radius-200 */
+    background: var(--bd-input-bg);
+    color: var(--bd-ink);
+    font-size: 13px; /* --p-font-size-325 */
+    line-height: 20px; /* --p-font-line-height-500 */
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.board-input:hover:not(:focus) {
+    border-color: var(--bd-input-border-hover);
+    background: var(--bd-input-bg-hover);
+}
+
+.board-input:focus-visible {
+    border-color: var(--bd-input-border-active);
+    background: var(--bd-input-bg-active);
+    outline: 2px solid var(--bd-focus); /* --p-border-width-050 */
+    outline-offset: 1px;
+}
+
+/* A field that failed validation, and the message under it. */
+.board-input--error {
+    border-color: var(--bd-rejected); /* --p-color-border-critical-secondary */
+    background: var(--bd-rejected-wash); /* --p-color-bg-surface-critical */
+}
+
+.board-error {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    color: var(--bd-rejected); /* --p-color-text-critical */
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.board-error svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+/*
+ * Upload area, matched to Polaris' medium DropZone: a dashed input-coloured
+ * outline over the input surface, with the action and its hint centred.
+ */
+.board-dropzone {
+    position: relative;
+    display: flex;
+    min-height: 100px; /* 6.25rem */
+    align-items: center;
+    justify-content: center;
+    padding: 12px; /* --p-space-300 */
+    border: 1px dashed var(--bd-input-border);
+    border-radius: 8px;
+    background: var(--bd-input-bg);
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.board-dropzone:hover {
+    border-color: var(--bd-input-border-hover);
+}
+
+.board-dropzone.is-dragging {
+    border-color: var(--bd-input-border-active);
+    background: var(--bd-input-bg-active);
+}
+
+.board-dropzone--error {
+    border-color: var(--bd-rejected);
+    background: var(--bd-rejected-wash);
+}
+
+.board-dropzone__hint {
+    font-size: 12px; /* --p-font-size-300, body-sm */
+    line-height: 16px;
+    color: var(--bd-ink-mid);
+}
+
+/* Badge, from Polaris': 2px/8px inset, hairline border and a translucent fill. */
+.board-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px; /* --p-space-050 / --p-space-200 */
+    border: 1px solid var(--bd-border);
+    border-radius: 8px; /* --p-border-radius-200 */
+    background: var(--bd-badge-bg);
+    color: var(--bd-ink-mid); /* --p-color-text-secondary */
+    font-size: 12px;
+    font-weight: 550; /* --p-font-weight-medium */
+    line-height: 16px;
+    white-space: nowrap;
+}
+
+.board-badge svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/*
+ * Banner, in Polaris' "within content container" form: a tinted surface with
+ * the tone's text colour and its icon, rather than the saturated fill a
+ * page-level banner uses.
+ */
+.board-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px; /* --p-space-200 */
+    padding: 12px; /* --p-space-300 */
+    border-radius: 12px; /* --p-border-radius-300 */
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.board-banner > svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.board-banner__content {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.board-banner__title {
+    font-weight: 650; /* --p-font-weight-semibold */
+}
+
+.board-banner--info {
+    background: var(--bd-info-wash);
+    color: var(--bd-info);
+}
+
+.board-banner--success {
+    background: var(--bd-positive-wash);
+    color: var(--bd-positive);
+}
+
+.board-banner--caution {
+    background: var(--bd-caution-wash);
+    color: var(--bd-caution);
+}
+
+.board-banner--critical {
+    background: var(--bd-critical-wash);
+    color: var(--bd-critical);
+}
+
+/* Toast, matching Polaris': inverse surface, 12px inset, 8px radius. */
+.board-toast {
+    display: inline-flex;
+    align-items: center;
+    max-width: 500px; /* 31.25rem */
+    padding: 12px; /* --p-space-300 */
+    border-radius: 8px;
+    background: var(--bd-toast-bg);
+    box-shadow: var(--bd-toast-shadow);
+    color: var(--bd-toast-ink);
+    font-size: 13px;
+    line-height: 20px;
+}

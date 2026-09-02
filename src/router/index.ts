@@ -18,6 +18,29 @@ const routes = [
     meta: { isPublic: true }
   },
   {
+    // Merchant-facing board. Public and embedded in an iframe by each Shopify
+    // app, so it sits outside the authenticated tree and skips the auth check.
+    path: '/board/:slug',
+    component: () => import('@/layouts/BoardLayout.vue'),
+    meta: { isPublic: true, isBoard: true },
+    children: [
+      {
+        // The roadmap leads, and takes the bare path so that embeds already
+        // pointing at /board/{slug} land on it without changing their snippet.
+        path: '',
+        name: 'board-roadmap',
+        component: () => import('@/views/board/BoardRoadmapView.vue'),
+        // Columns should use the whole viewport rather than the reading-width cap.
+        meta: { fullWidth: true },
+      },
+      {
+        path: 'requests',
+        name: 'board-requests',
+        component: () => import('@/views/board/BoardRequestsView.vue'),
+      },
+    ],
+  },
+  {
     path: '/',
     component: MainLayout,
     meta: { requiresAuth: true },
@@ -64,6 +87,18 @@ const routes = [
         meta: { permission: 'email_templates.view' }
       },
       {
+        path: 'feature-requests',
+        name: 'feature-requests',
+        component: () => import('@/views/FeatureRequestsPage.vue'),
+        meta: { permission: 'feature_requests.view' }
+      },
+      {
+        path: 'board-settings',
+        name: 'board-settings',
+        component: () => import('@/views/BoardSettingsPage.vue'),
+        meta: { permission: 'board_settings.edit' }
+      },
+      {
         path: 'accounts/users',
         name: 'accounts-users',
         component: () => import('@/views/accounts/AccountsUsersPage.vue'),
@@ -91,13 +126,19 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
+  // The public board never touches CRM auth: a merchant has no admin session,
+  // and an admin browsing it should get no extra privileges.
+  if (to.matched.some(record => record.meta.isBoard)) {
+    next()
+    return
+  }
+
   const authStore = useAuthStore()
 
   // Check session persistence
   await authStore.checkAuth()
 
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-  const isPublic = to.matched.some(record => record.meta.isPublic)
 
   if (requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login' })
