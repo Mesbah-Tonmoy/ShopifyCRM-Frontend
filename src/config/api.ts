@@ -44,11 +44,31 @@ class ApiService {
   }
 
   async post<T>(endpoint: string, body: unknown, includeAuth = true): Promise<ApiResponse<T>> {
-    console.log('**** ', endpoint, body);
     const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: this.getHeaders(includeAuth),
       body: JSON.stringify(body),
+    });
+
+    return this.handleResponse<T>(response);
+  }
+
+  async postForm<T>(endpoint: string, formData: FormData, includeAuth = true): Promise<ApiResponse<T>> {
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+    };
+
+    if (includeAuth) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
     });
 
     return this.handleResponse<T>(response);

@@ -102,6 +102,7 @@ const permissionGroups = computed<Record<string, { title: string, permissions: P
     email_templates: { title: 'Email Templates', permissions: [] },
     pricing_plans: { title: 'Pricing Plans', permissions: [] },
     integrations: { title: 'Integrations', permissions: [] },
+    features: { title: 'Features', permissions: [] },
   };
 
   allPermissions.value.forEach(p => {
@@ -479,6 +480,35 @@ onMounted(fetchInitialData);
                 </label>
                 <label
                   v-for="perm in permissionGroups.integrations.permissions"
+                  :key="perm.id"
+                  class="flex items-center group cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
+                    :checked="isPermissionSelected(perm.id)"
+                    @change="togglePermission(perm.id)"
+                  >
+                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Group: Features -->
+            <div class="space-y-4" v-if="permissionGroups.features">
+              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.features.title }}</h3>
+              <div class="space-y-3">
+                <label class="flex items-center group cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
+                    :checked="isGroupSelected(permissionGroups.features.permissions)"
+                    @change="toggleGroup(permissionGroups.features.permissions)"
+                  >
+                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
+                </label>
+                <label
+                  v-for="perm in permissionGroups.features.permissions"
                   :key="perm.id"
                   class="flex items-center group cursor-pointer"
                 >

@@ -99,6 +99,12 @@ const routes = [
         meta: { permission: 'board_settings.edit' }
       },
       {
+        path: 'features',
+        name: 'features',
+        component: () => import('@/views/FeaturesPage.vue'),
+        meta: { permission: 'features.view' }
+      },
+      {
         path: 'accounts/users',
         name: 'accounts-users',
         component: () => import('@/views/accounts/AccountsUsersPage.vue'),
