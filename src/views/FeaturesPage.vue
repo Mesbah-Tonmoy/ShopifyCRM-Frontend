@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import Swal from 'sweetalert2';
-import { featureService, type Feature } from '@/services/featureService';
+import { errorMessage } from '@/utils/errors';
+import { featureService, type Feature, type FeatureFilters } from '@/services/featureService';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
 import { Toast } from '@/utils/toast';
@@ -83,7 +84,7 @@ const fetchFeatures = async () => {
   try {
     loading.value = true;
 
-    const filters: any = {};
+    const filters: FeatureFilters = {};
     if (selectedAppId.value) filters.app_id = selectedAppId.value;
     if (dateFrom.value) filters.date_from = dateFrom.value;
     if (dateTo.value) filters.date_to = dateTo.value;
@@ -93,8 +94,8 @@ const fetchFeatures = async () => {
     if (response.success && response.data) {
       features.value = response.data.data;
     }
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Failed to load features' });
+  } catch (err) {
+    Swal.fire({ icon: 'error', title: 'Error', text: errorMessage(err, 'Failed to load features') });
   } finally {
     loading.value = false;
   }
@@ -174,8 +175,8 @@ const saveFeature = async () => {
 
     await fetchFeatures();
     closeModal();
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Failed to save feature' });
+  } catch (err) {
+    Swal.fire({ icon: 'error', title: 'Error', text: errorMessage(err, 'Failed to save feature') });
   } finally {
     saving.value = false;
     uploadingImage.value = false;
@@ -199,8 +200,8 @@ const handleDelete = async (feature: Feature) => {
       await featureService.delete(feature.id);
       features.value = features.value.filter(f => f.id !== feature.id);
       Toast.fire({ icon: 'success', title: 'Deleted!' });
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Failed to delete feature' });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Error', text: errorMessage(err, 'Failed to delete feature') });
     } finally {
       deletingId.value = null;
     }
