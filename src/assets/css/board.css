@@ -26,6 +26,7 @@
     --bd-ink: #303030; /* --p-color-text */
     --bd-ink-mid: #616161; /* --p-color-text-secondary */
     --bd-ink-soft: #8a8a8a; /* --p-color-icon-secondary */
+    --bd-icon: #4a4a4a; /* --p-color-icon */
 
     /*
      * Primary action. Polaris fills these near-black rather than with a brand
@@ -61,17 +62,43 @@
         0 0.5px 0 1.5px rgba(255, 255, 255, 0.25) inset; /* --p-shadow-button-primary */
     --bd-modal-shadow: 0 20px 20px -8px rgba(26, 26, 26, 0.28); /* --p-shadow-600 */
 
-    /* Status. Neutral, info, caution, success, critical — in that order. */
-    --bd-pending: #616161; /* --p-color-text-secondary */
-    --bd-pending-wash: #f1f1f1; /* --p-color-bg */
-    --bd-approved: #003a5a; /* --p-color-text-info */
-    --bd-approved-wash: #eaf4ff; /* --p-color-bg-surface-info */
-    --bd-progress: #4f4700; /* --p-color-text-caution */
-    --bd-progress-wash: #fff8db; /* --p-color-bg-surface-caution */
-    --bd-done: #014b40; /* --p-color-text-success */
-    --bd-done-wash: #cdfed4; /* --p-color-bg-surface-success */
-    --bd-rejected: #8e0b21; /* --p-color-text-critical */
-    --bd-rejected-wash: #fee8eb; /* --p-color-bg-surface-critical */
+    /*
+     * Status. Neutral, info, warning, success, critical — in that order, each
+     * carrying a whole Polaris tone rather than a text/surface pair, because a
+     * roadmap column spends it in four places at once: `-rule` draws the bar
+     * capping the column, `-fill` the dot beside its name, and the count badge
+     * fills `-wash` inside `-line`. The bare token stays the text colour, so
+     * BoardStatusChip keeps reading it alongside `-wash` as before.
+     *
+     * Neutral is the one tone whose rule is not its text: a #303030 bar would
+     * read as heavier than the coloured ones rather than quieter, so the bar
+     * drops to secondary text and only the badge label stays full strength.
+     */
+    --bd-pending: #303030; /* --p-color-text */
+    --bd-pending-rule: #616161; /* --p-color-text-secondary */
+    --bd-pending-fill: #b5b5b5; /* --p-color-bg-fill-disabled */
+    --bd-pending-wash: #e3e3e3; /* --p-color-bg-fill-tertiary */
+    --bd-pending-line: #e3e3e3; /* the wash again: a neutral count reads as a plain chip */
+    --bd-approved: #00527c; /* --p-color-text-info */
+    --bd-approved-rule: #00527c; /* --p-color-text-info */
+    --bd-approved-fill: #0094d5; /* --p-color-bg-fill-info */
+    --bd-approved-wash: #ebf9ff; /* --p-color-bg-surface-info */
+    --bd-approved-line: #d1f0ff; /* --p-color-border-info */
+    --bd-progress: #7e4b00; /* --p-color-text-warning */
+    --bd-progress-rule: #7e4b00; /* --p-color-text-warning */
+    --bd-progress-fill: #ffb800; /* --p-color-bg-fill-warning */
+    --bd-progress-wash: #fff5ea; /* --p-color-bg-surface-warning */
+    --bd-progress-line: #ffe0b3; /* --p-color-border-warning */
+    --bd-done: #0c5132; /* --p-color-text-success */
+    --bd-done-rule: #0c5132; /* --p-color-text-success */
+    --bd-done-fill: #29845a; /* --p-color-bg-fill-success */
+    --bd-done-wash: #e7f7ef; /* --p-color-bg-surface-success */
+    --bd-done-line: #cdfee1; /* --p-color-border-success */
+    --bd-rejected: #8e1f0b; /* --p-color-text-critical */
+    --bd-rejected-rule: #8e1f0b; /* --p-color-text-critical */
+    --bd-rejected-fill: #e51c00; /* --p-color-bg-fill-critical */
+    --bd-rejected-wash: #fdf1f0; /* --p-color-bg-surface-critical */
+    --bd-rejected-line: #fee9e8; /* --p-color-border-critical */
 
     /*
      * Tone aliases. Polaris uses the same four colour pairs for badges,
@@ -132,6 +159,7 @@
     --bd-ink: #e3e3e3; /* --p-color-text */
     --bd-ink-mid: #b5b5b5; /* --p-color-text-secondary */
     --bd-ink-soft: #8a8a8a; /* derived */
+    --bd-icon: #b5b5b5; /* derived */
 
     --bd-accent: #ffffff; /* --p-color-bg-fill-brand */
     --bd-accent-hover: #f3f3f3; /* --p-color-bg-fill-brand-hover */
@@ -156,16 +184,37 @@
     --bd-btn-primary-shadow: none; /* derived */
     --bd-modal-shadow: 0 20px 20px -8px rgba(0, 0, 0, 0.5); /* derived */
 
-    --bd-pending: #b5b5b5; /* derived */
+    /*
+     * The tones invert: what was the dark text colour on a pale wash becomes
+     * the pale colour on a dark one. `-fill` is the exception and keeps its
+     * light value, because a dot is a solid shape rather than text and the
+     * saturated fills already carry against both grounds.
+     */
+    --bd-pending: #e3e3e3; /* derived */
+    --bd-pending-rule: #b5b5b5; /* derived */
+    --bd-pending-fill: #8a8a8a; /* derived */
     --bd-pending-wash: #3a3a3a; /* derived */
+    --bd-pending-line: #3a3a3a; /* derived */
     --bd-approved: #a8d8ff; /* derived */
+    --bd-approved-rule: #a8d8ff; /* derived */
+    --bd-approved-fill: #0094d5; /* --p-color-bg-fill-info */
     --bd-approved-wash: #002d55; /* derived */
+    --bd-approved-line: #00437f; /* derived */
     --bd-progress: #ffe600; /* --p-color-bg-fill-caution */
+    --bd-progress-rule: #ffe600; /* derived */
+    --bd-progress-fill: #ffb800; /* --p-color-bg-fill-warning */
     --bd-progress-wash: #3d3800; /* derived */
+    --bd-progress-line: #5c5300; /* derived */
     --bd-done: #92fcac; /* --p-color-border-success */
+    --bd-done-rule: #92fcac; /* derived */
+    --bd-done-fill: #29845a; /* --p-color-bg-fill-success */
     --bd-done-wash: #003d33; /* derived */
+    --bd-done-line: #0c5132; /* derived */
     --bd-rejected: #fec1c7; /* --p-color-border-critical */
+    --bd-rejected-rule: #fec1c7; /* derived */
+    --bd-rejected-fill: #e51c00; /* --p-color-bg-fill-critical */
     --bd-rejected-wash: #4a0b16; /* derived */
+    --bd-rejected-line: #8e1f0b; /* derived */
 
     --bd-badge-bg: rgba(255, 255, 255, 0.08); /* derived */
 
@@ -176,23 +225,48 @@
 /* Status colours resolved from one place, mirroring StatusChip in the admin UI. */
 .board-root [data-status='pending'] {
     --bd-status: var(--bd-pending);
+    --bd-status-rule: var(--bd-pending-rule);
+    --bd-status-fill: var(--bd-pending-fill);
     --bd-status-wash: var(--bd-pending-wash);
+    --bd-status-line: var(--bd-pending-line);
 }
 .board-root [data-status='approved'] {
     --bd-status: var(--bd-approved);
+    --bd-status-rule: var(--bd-approved-rule);
+    --bd-status-fill: var(--bd-approved-fill);
     --bd-status-wash: var(--bd-approved-wash);
+    --bd-status-line: var(--bd-approved-line);
 }
 .board-root [data-status='in_progress'] {
     --bd-status: var(--bd-progress);
+    --bd-status-rule: var(--bd-progress-rule);
+    --bd-status-fill: var(--bd-progress-fill);
     --bd-status-wash: var(--bd-progress-wash);
+    --bd-status-line: var(--bd-progress-line);
 }
 .board-root [data-status='completed'] {
     --bd-status: var(--bd-done);
+    --bd-status-rule: var(--bd-done-rule);
+    --bd-status-fill: var(--bd-done-fill);
     --bd-status-wash: var(--bd-done-wash);
+    --bd-status-line: var(--bd-done-line);
 }
 .board-root [data-status='rejected'] {
     --bd-status: var(--bd-rejected);
+    --bd-status-rule: var(--bd-rejected-rule);
+    --bd-status-fill: var(--bd-rejected-fill);
     --bd-status-wash: var(--bd-rejected-wash);
+    --bd-status-line: var(--bd-rejected-line);
+}
+
+/*
+ * Embedded, the board is a pane inside the host admin rather than a page of
+ * its own, so it drops its ground and lets whatever the app paints show
+ * through. Nothing sets a background on html or body, so the document behind
+ * is already transparent and the iframe composites straight onto the host.
+ */
+.board-root[data-embedded='true'] {
+    background: transparent;
 }
 
 .board-root ::selection {
@@ -206,12 +280,8 @@
 }
 
 .board-scroll::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-.board-scroll::-webkit-scrollbar-track {
-    background: var(--bd-sunken);
-    border-radius: 8px;
+    width: 10px;
+    height: 10px;
 }
 .board-scroll::-webkit-scrollbar-thumb {
     background: var(--bd-border-strong);
@@ -577,4 +647,422 @@
     color: var(--bd-toast-ink);
     font-size: 13px;
     line-height: 20px;
+}
+
+
+/* =========================================================================
+ * Roadmap
+ *
+ * The board's own page: the heading row, the status tracks and the request
+ * cards inside them, plus the vote control a card carries. Kept here with the
+ * rest of the `.board-*` vocabulary rather than scoped into the components, so
+ * one sheet holds every class the board renders and the breakpoints sit beside
+ * the tokens they read.
+ * ========================================================================= */
+
+/*
+ * A card's vote control: the chevron stacked over the count in a narrow
+ * well, drawn as a card rather than as one of Polaris' shadowed buttons so it
+ * reads as part of the request it sits beside.
+ */
+.board-vote {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  align-self: flex-start;
+  border: 1px solid var(--bd-border);
+  border-radius: 8px; /* --p-border-radius-200 */
+  background: var(--bd-surface);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.board-vote svg {
+  fill: var(--bd-icon);
+}
+
+.board-vote__count {
+  font-weight: 650; /* --p-font-weight-semibold */
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-ink);
+}
+
+/* The card variant, sized from the design: a 44px well on a 12px gutter. */
+.board-vote--compact {
+  width: 44px;
+  padding: 8px 0;
+}
+
+.board-vote--compact svg {
+  width: 16px;
+  height: 16px;
+}
+
+.board-vote--compact .board-vote__count {
+  font-size: 13px;
+  line-height: 13px;
+}
+
+/* The modal shows a single request, so its control carries more weight. */
+.board-vote--regular {
+  width: 54px;
+  padding: 10px 0;
+}
+
+.board-vote--regular svg {
+  width: 20px;
+  height: 20px;
+}
+
+.board-vote--regular .board-vote__count {
+  font-size: 15px;
+  line-height: 15px;
+}
+
+.board-vote:hover:not(:disabled) {
+  border-color: var(--bd-border-strong);
+  background: var(--bd-raised);
+}
+
+/*
+ * Voted reads blue rather than filled grey: Polaris keeps selection in the
+ * interactive hue, and a grey fill was hard to tell from the disabled state.
+ */
+.board-vote.is-voted {
+  border-color: var(--bd-accent-line);
+  background: var(--bd-accent-wash);
+}
+
+.board-vote.is-voted svg,
+.board-vote.is-voted .board-vote__count {
+  fill: var(--bd-link);
+  color: var(--bd-link);
+}
+
+.board-vote:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.board-roadmap__bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.board-roadmap__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+}
+
+.board-roadmap__title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 650; /* --p-font-weight-semibold */
+  letter-spacing: -0.01em;
+}
+
+.board-roadmap__subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--bd-ink-mid);
+}
+
+.board-roadmap__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /*
+   * A flex item will not shrink below its min-content width by default, and
+   * this row's min-content is the whole un-shrinkable pill — so without this
+   * the row grows past the page rather than letting the pill clamp. Cleared
+   * here so the pill's own `max-width: 100%` has a bounded box to measure.
+   */
+  min-width: 0;
+  gap: 8px;
+}
+
+/*
+ * Reads as a status indicator rather than a control, so it is a pill and sits
+ * a little taller than the 32px controls beside it.
+ */
+.board-roadmap__voter {
+  display: inline-flex;
+  /*
+   * Never shrink. Left shrinkable, the pill compresses to share the row with
+   * the sort and the action instead of wrapping below them, which crushes the
+   * domain and breaks "Voting as" over two lines inside a 30px pill. Holding
+   * its width makes the row wrap, which is what should give here.
+   */
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--bd-border);
+  border-radius: 999px;
+  background: var(--bd-surface);
+  /* The one concession, for a viewport too narrow even for its own line. */
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--bd-ink-mid);
+}
+
+.board-roadmap__voter-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bd-success);
+}
+
+.board-roadmap__voter-shop {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 550; /* --p-font-weight-medium */
+  color: var(--bd-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-roadmap__voter--readonly {
+  color: var(--bd-ink-soft);
+}
+
+/*
+ * Polaris' medium button, which is what the design draws. `.board-btn` slims
+ * to 28px above 48em for controls sitting inside a modal's footer; the page's
+ * one primary action holds its height instead.
+ */
+.board-btn.board-roadmap__submit {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.board-roadmap__loading {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--bd-ink-soft);
+}
+
+/* Columns ----------------------------------------------------------------- */
+
+/*
+ * One status per row to start with: on a phone the board reads as a list and
+ * the page itself scrolls. From 48em the tracks turn and sit side by side,
+ * `minmax(350px, 1fr)` sharing the width evenly while they fit and holding at
+ * a readable 350px once they do not, scrolling the strip from there.
+ */
+.board-roadmap__columns {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 48em) {
+  .board-roadmap__columns {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(350px, 1fr);
+    overflow-x: auto;
+    /* Room for the scrollbar, so it never sits over the last card. */
+    padding-bottom: 8px;
+  }
+}
+
+.board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+ * The heading is a card in its own right, capped by the status rule. The rule
+ * is inside it rather than floated above, so `overflow: hidden` clips it to
+ * the card's top corners and no separate radius has to be kept in step.
+ */
+.board-column__head {
+  overflow: hidden;
+  border: 1px solid var(--bd-border);
+  border-radius: 12px; /* --p-border-radius-300 */
+  background: var(--bd-surface);
+  box-shadow: var(--bd-shadow-sm);
+}
+
+.board-column__rule {
+  height: 4px;
+  background: var(--bd-status-rule);
+}
+
+.board-column__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.board-column__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-column__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bd-status-fill);
+}
+
+.board-column__label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--bd-ink);
+}
+
+.board-column__count {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--bd-status-line);
+  border-radius: 8px;
+  background: var(--bd-status-wash);
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-status);
+}
+
+.board-column__placeholder {
+  margin: 0;
+  padding: 20px 12px;
+  border: 1px dashed var(--bd-border-strong);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--bd-ink-soft);
+}
+
+/* Cards ------------------------------------------------------------------- */
+
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--bd-border);
+  border-radius: 12px;
+  background: var(--bd-surface);
+  box-shadow: var(--bd-shadow-sm);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.board-card:hover {
+  background: var(--bd-raised);
+  box-shadow: var(--bd-shadow-md);
+}
+
+.board-card__row {
+  display: flex;
+  gap: 12px;
+}
+
+.board-card__text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-card__title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 650;
+}
+
+.board-card__body {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--bd-ink-mid);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* Pinned, and the attachment marker: the same quiet chip in both places. */
+.board-card__chip {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--bd-sunken);
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--bd-icon);
+}
+
+.board-card__chip svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: var(--bd-icon);
+}
+
+/*
+ * What the team has said about the request, kept below a hairline so it is
+ * read as an update rather than as more of the merchant's own description.
+ */
+.board-card__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bd-sunken);
+}
+
+.board-card__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--bd-ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Styled as a link, but the whole card is the control that opens the thread. */
+.board-card__comments {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--bd-link);
 }

@@ -211,7 +211,7 @@ const toggleSubscription = async () => {
         <BoardBanner
           v-if="request.status_note"
           :tone="statusTone(request.status)"
-          title="Response"
+          title="Developer Response"
           class="mt-4"
         >
           <p>{{ request.status_note }}</p>

@@ -15,7 +15,7 @@ export interface BoardContext {
     notify: (message: string) => void;
     handleError: (error: unknown) => void;
     refreshCounts: () => Promise<void>;
-    /** Opens the submission form, which the layout hosts so any tab can raise it. */
+    /** Opens the submission form, which the layout hosts above the board. */
     openSubmitForm: () => void;
     /**
      * The last request created, and the last one changed, from outside a view.

@@ -73,92 +73,98 @@ watch(
 
 <template>
   <section>
-    <!-- Heading and sort share a row, with the control pinned right. -->
-    <header class="mb-5 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 class="text-xl font-bold tracking-[-0.3px]">Roadmap</h1>
-        <p class="mt-0.5 text-[13px]" style="color: var(--bd-ink-mid)">
+    <!--
+      Title on the left, and everything the merchant can act with on the right:
+      who they are voting as, how the board is ordered, and the one primary
+      action. The row wraps rather than truncating, so a long shop domain pushes
+      the controls onto their own line instead of being cut.
+    -->
+    <header class="board-roadmap__bar">
+      <div class="board-roadmap__intro">
+        <h1 class="board-roadmap__title">Roadmap</h1>
+        <p class="board-roadmap__subtitle">
           Where every request stands. Votes stay open at every stage — they decide what moves next.
         </p>
       </div>
 
-      <BoardSelect v-model="sort" :options="BOARD_SORT_OPTIONS" aria-label="Sort roadmap" />
+      <div class="board-roadmap__controls">
+        <span v-if="board.config.value?.voter" class="board-roadmap__voter">
+          <span class="board-roadmap__voter-dot"></span>
+          <span>Voting as</span>
+          <strong class="board-roadmap__voter-shop">
+            {{ board.config.value.voter.shop_domain }}
+          </strong>
+        </span>
+        <span v-else class="board-roadmap__voter board-roadmap__voter--readonly">Read only</span>
+
+        <BoardSelect v-model="sort" :options="BOARD_SORT_OPTIONS" aria-label="Sort roadmap" />
+
+        <button
+          v-if="board.canSubmit.value"
+          type="button"
+          class="board-btn board-btn--primary board-roadmap__submit"
+          @click="board.openSubmitForm()"
+        >
+          Request a feature
+        </button>
+      </div>
     </header>
 
-    <p v-if="loading" class="py-10 text-center text-[14px]" style="color: var(--bd-ink-soft)">Loading roadmap…</p>
+    <p v-if="loading" class="board-roadmap__loading">Loading roadmap…</p>
 
-    <!--
-      Columns share the full width when they fit, and scroll horizontally once
-      they cannot: `flex-1` spreads the spare space, `min-w` stops them being
-      squeezed past readability, and `max-w` keeps a board with only two or
-      three visible columns from stretching into oversized panels — which is
-      where `justify-between` takes over and distributes them instead.
-    -->
-    <div v-else class="board-scroll flex justify-between gap-3.5 overflow-x-auto pb-3">
-      <div
+    <!-- One track per status; `.board-roadmap__columns` carries the layout. -->
+    <div v-else class="board-scroll board-roadmap__columns">
+      <section
         v-for="column in columns"
         :key="column.status"
-        class="flex min-w-[260px] max-w-[400px] flex-1 flex-col"
+        class="board-column"
         :data-status="column.status"
       >
-        <div class="h-[3px] rounded-t-[3px]" style="background: var(--bd-status)"></div>
+        <div class="board-column__head">
+          <div class="board-column__rule"></div>
+          <div class="board-column__row">
+            <div class="board-column__name">
+              <span class="board-column__dot"></span>
+              <h2 class="board-column__label">{{ column.label }}</h2>
+            </div>
+            <span class="board-column__count">{{ column.total }}</span>
+          </div>
+        </div>
 
-        <header
-          class="flex items-center gap-2 rounded-b-[10px] px-3 py-2.5"
-          style="background: var(--bd-surface); border: 1px solid var(--bd-border); border-top: none"
+        <article
+          v-for="request in column.requests"
+          :key="request.id"
+          class="board-card"
+          role="button"
+          tabindex="0"
+          @click="activeRequest = request"
+          @keydown.enter.prevent="activeRequest = request"
+          @keydown.space.prevent="activeRequest = request"
         >
-          <span class="text-[14px] font-semibold">{{ column.label }}</span>
-          <span
-            class="ml-auto rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums"
-            style="background: var(--bd-sunken); color: var(--bd-ink-mid)"
-          >
-            {{ column.total }}
+          <span v-if="request.is_pinned" class="board-card__chip">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path fill-rule="evenodd" d="M6.5 14.5h2.35l.408 2.856a.75.75 0 0 0 1.485 0l.407-2.856h2.35a2 2 0 0 0 2-2v-.5a2 2 0 0 0-1.944-2l-.609-2.738a2 2 0 0 0 1.053-1.762v-.5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v.5a2 2 0 0 0 1.053 1.762l-.609 2.739a2 2 0 0 0-1.944 1.999v.5a2 2 0 0 0 2 2Zm1.481-4.5h1.269a.75.75 0 0 1 0 1.5h-2.5v-.007l-.265.007a.5.5 0 0 0-.485.5v.5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-.5a.5.5 0 0 0-.485-.5l-1.17-.032-1.108-4.988.999-.539a.5.5 0 0 0 .264-.441v-.5a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 0-.5.5v.5a.5.5 0 0 0 .264.441l1 .539-.783 3.52Z" />
+            </svg>
+            Pinned
           </span>
-        </header>
 
-        <div class="mt-2.5 flex flex-col gap-2.5">
-          <article
-            v-for="request in column.requests"
-            :key="request.id"
-            class="board-card flex cursor-pointer gap-3 rounded-[10px] border border-[var(--bd-border)] px-3 py-3 shadow-[var(--bd-shadow-sm)] hover:shadow-[var(--bd-shadow-md)]"
-            style="transition: background-color 150ms ease, box-shadow 150ms ease"
-            role="button"
-            tabindex="0"
-            @click="activeRequest = request"
-            @keydown.enter.prevent="activeRequest = request"
-            @keydown.space.prevent="activeRequest = request"
-          >
-            <div class="min-w-0 flex-1">
-              <div v-if="request.is_pinned" class="mb-1.5">
-                <span class="board-badge">
-                  <svg viewBox="0 0 20 20" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M6.5 14.5h2.35l.408 2.856a.75.75 0 0 0 1.485 0l.407-2.856h2.35a2 2 0 0 0 2-2v-.5a2 2 0 0 0-1.944-2l-.609-2.738a2 2 0 0 0 1.053-1.762v-.5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v.5a2 2 0 0 0 1.053 1.762l-.609 2.739a2 2 0 0 0-1.944 1.999v.5a2 2 0 0 0 2 2Zm1.481-4.5h1.269a.75.75 0 0 1 0 1.5h-2.5v-.007l-.265.007a.5.5 0 0 0-.485.5v.5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-.5a.5.5 0 0 0-.485-.5l-1.17-.032-1.108-4.988.999-.539a.5.5 0 0 0 .264-.441v-.5a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 0-.5.5v.5a.5.5 0 0 0 .264.441l1 .539-.783 3.52Z" />
-                  </svg>
-                  Pinned
-                </span>
-              </div>
-              <h3 class="text-[14px] leading-snug font-semibold">{{ request.title }}</h3>
-              <img
-                v-if="request.image_url"
-                :src="request.image_url"
-                alt=""
-                loading="lazy"
-                class="mt-1.5 max-h-28 w-full rounded-md object-cover"
-                style="border: 1px solid var(--bd-border); background: var(--bd-sunken)"
-              />
-              <p v-if="request.description" class="mt-1 line-clamp-3 text-[13px]" style="color: var(--bd-ink-mid)">
-                {{ request.description }}
-              </p>
-              <p v-if="request.status_note" class="mt-1.5 line-clamp-2 text-[12.5px]" style="color: var(--bd-ink-soft)">
-                {{ request.status_note }}
-              </p>
-              <span
-                v-if="request.comments_count"
-                class="mt-1.5 block text-[12px] font-semibold"
-                style="color: var(--bd-link)"
-              >
-                {{ request.comments_count }} {{ request.comments_count === 1 ? 'comment' : 'comments' }}
+          <div class="board-card__row">
+            <div class="board-card__text">
+              <h3 class="board-card__title">{{ request.title }}</h3>
+
+              <!--
+                The image is announced rather than shown: a thumbnail at this
+                width reads as noise beside the title, and the modal behind
+                this card renders the attachment at a size worth looking at.
+              -->
+              <span v-if="request.image_url" class="board-card__chip">
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M12.6 4.4a2.25 2.25 0 0 0-3.18 0l-4.6 4.6a3.75 3.75 0 0 0 5.31 5.3l4.24-4.24a.75.75 0 0 1 1.06 1.06l-4.24 4.24a5.25 5.25 0 0 1-7.43-7.42l4.6-4.6a3.75 3.75 0 0 1 5.3 5.3l-4.59 4.6a2.25 2.25 0 0 1-3.18-3.18l3.89-3.89a.75.75 0 0 1 1.06 1.06l-3.89 3.89a.75.75 0 0 0 1.06 1.06l4.6-4.6a2.25 2.25 0 0 0 0-3.18Z" />
+                </svg>
+                1 attachment
               </span>
+
+              <p v-if="request.description" class="board-card__body">{{ request.description }}</p>
             </div>
 
             <BoardVoteButton
@@ -168,25 +174,22 @@ watch(
               compact
               @toggle="toggleVote(request)"
             />
-          </article>
+          </div>
 
-          <p
-            v-if="!column.requests.length"
-            class="rounded-[10px] px-3 py-6 text-center text-[13px]"
-            style="border: 1px dashed var(--bd-border-strong); color: var(--bd-ink-soft)"
-          >
-            Nothing here yet
-          </p>
+          <div v-if="request.status_note || request.comments_count" class="board-card__foot">
+            <p v-if="request.status_note" class="board-card__note">{{ request.status_note }}</p>
+            <span v-if="request.comments_count" class="board-card__comments">
+              {{ request.comments_count }} {{ request.comments_count === 1 ? 'comment' : 'comments' }}
+            </span>
+          </div>
+        </article>
 
-          <p
-            v-else-if="column.total > column.requests.length"
-            class="rounded-[10px] px-3 py-2.5 text-center text-[13px]"
-            style="border: 1px dashed var(--bd-border-strong); color: var(--bd-ink-soft)"
-          >
-            {{ column.total - column.requests.length }} more
-          </p>
-        </div>
-      </div>
+        <p v-if="!column.requests.length" class="board-column__placeholder">Nothing here yet</p>
+
+        <p v-else-if="column.total > column.requests.length" class="board-column__placeholder">
+          {{ column.total - column.requests.length }} more
+        </p>
+      </section>
     </div>
 
     <BoardRequestModal
@@ -199,12 +202,3 @@ watch(
   </section>
 </template>
 
-<style scoped>
-.board-card {
-  background: var(--bd-surface);
-}
-
-.board-card:hover {
-  background: var(--bd-raised);
-}
-</style>

@@ -3,7 +3,7 @@ import { boardService, type BoardRequest } from '@/services/boardService';
 import { useBoardContext } from '@/composables/useBoardContext';
 
 /**
- * Optimistic voting, shared by the two board tabs.
+ * Optimistic voting, shared by the roadmap and the request modal.
  *
  * The card flips the moment it is clicked and rolls back if the server
  * disagrees, so a vote never waits on a round trip.

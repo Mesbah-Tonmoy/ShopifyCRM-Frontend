@@ -172,23 +172,25 @@ onMounted(() => {
 });
 
 watch(() => route.fullPath, () => reportHeight());
-
-// The roadmap answers "what is happening with this app?", which is the question
-// most merchants arrive with, so it leads.
-const tabs = [
-  { name: 'board-roadmap', label: 'Roadmap' },
-  { name: 'board-requests', label: 'Feature Requests' },
-];
 </script>
 
 <template>
-  <div class="board-root" :data-theme="theme ?? undefined">
-    <!-- chrome -->
+  <div
+    class="board-root"
+    :data-theme="theme ?? undefined"
+    :data-embedded="embedded ? 'true' : undefined"
+  >
+    <!--
+      Standalone chrome only. The roadmap carries the voter pill and the
+      primary action itself, so an embedded board renders no bar at all and
+      starts at the page heading, sitting directly on the admin's own.
+    -->
     <header
-      class="sticky top-0 z-20 flex h-14 items-center gap-5 px-5"
+      v-if="!embedded"
+      class="sticky top-0 z-20 flex h-14 items-center gap-5 px-4"
       style="background: var(--bd-surface); border-bottom: 1px solid var(--bd-border)"
     >
-      <div v-if="!embedded" class="flex shrink-0 items-center gap-2.5">
+      <div class="flex shrink-0 items-center gap-2.5">
         <img
           v-if="config?.app.icon"
           :src="config.app.icon"
@@ -207,94 +209,42 @@ const tabs = [
         </span>
       </div>
 
-      <nav class="flex gap-0.5 rounded-lg p-[3px]" style="background: var(--bd-sunken)" role="tablist">
-        <router-link
-          v-for="tab in tabs"
-          :key="tab.name"
-          :to="{ name: tab.name, params: { slug }, query: route.query }"
-          class="rounded-md px-3 py-1.5 text-[14px] font-medium whitespace-nowrap transition"
-          :style="route.name === tab.name
-            ? { background: 'var(--bd-surface)', color: 'var(--bd-ink)', boxShadow: 'var(--bd-shadow-sm)', fontWeight: 600 }
-            : { color: 'var(--bd-ink-mid)' }"
-        >
-          {{ tab.label }}
-        </router-link>
-      </nav>
-
-      <div class="ml-auto flex items-center gap-2.5">
-        <span
-          v-if="config?.voter"
-          class="hidden items-center gap-1.5 rounded-full py-[5px] pr-3 pl-2.5 text-xs lg:flex"
-          style="border: 1px solid var(--bd-border); color: var(--bd-ink-mid)"
-        >
-          <span class="h-1.5 w-1.5 rounded-full" style="background: var(--bd-success)"></span>
-          Voting as
-          <strong class="font-medium" style="color: var(--bd-ink)">{{ config.voter.shop_domain }}</strong>
-        </span>
-        <span
-          v-else-if="!loading"
-          class="hidden rounded-full px-3 py-[5px] text-xs lg:block"
-          style="border: 1px solid var(--bd-border); color: var(--bd-ink-soft)"
-        >
-          Read only
-        </span>
-
-        <!-- The primary action rides in the chrome so it is on hand from either tab. -->
-        <button
-          v-if="canSubmit"
-          type="button"
-          class="board-btn board-btn--primary shrink-0"
-          @click="context.openSubmitForm()"
-        >
-          <!-- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="h-3.5 w-3.5">
-            <path d="M12 5v14M5 12h14" />
-          </svg> -->
-          <span class="hidden sm:inline">Request a feature</span>
-          <span class="sm:hidden">Request</span>
-        </button>
-
-        <button
-          v-if="!embedded"
-          type="button"
-          class="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] transition"
-          style="color: var(--bd-ink-mid)"
-          aria-label="Switch theme"
-          @click="toggleTheme"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[17px] w-[17px]">
-            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-          </svg>
-        </button>
-      </div>
+      <button
+        type="button"
+        class="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-[7px] transition"
+        style="color: var(--bd-ink-mid)"
+        aria-label="Switch theme"
+        @click="toggleTheme"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[17px] w-[17px]">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+        </svg>
+      </button>
     </header>
 
     <!-- states -->
-    <div v-if="loading" class="mx-auto max-w-[1240px] px-5 py-16 text-center text-[14px]" style="color: var(--bd-ink-soft)">
+    <div v-if="loading" class="mx-auto max-w-[1600px] px-4 py-16 text-center text-[14px]" style="color: var(--bd-ink-soft)">
       Loading board…
     </div>
 
-    <div v-else-if="fatalError" class="mx-auto max-w-md px-5 py-20 text-center">
+    <div v-else-if="fatalError" class="mx-auto max-w-md px-4 py-20 text-center">
       <h1 class="text-[20px] font-semibold">This board isn’t available</h1>
       <p class="mt-1.5 text-[14px]" style="color: var(--bd-ink-mid)">{{ fatalError }}</p>
     </div>
 
-    <main
-      v-else
-      class="mx-auto px-5 pt-6 pb-14"
-      :class="route.meta.fullWidth ? 'max-w-none' : 'max-w-[1240px]'"
-    >
+    <main v-else class="mx-auto max-w-[1600px] px-4 pt-8 pb-16">
       <router-view />
     </main>
 
     <footer
       v-if="!loading && !fatalError && !embedded"
-      class="mx-auto flex max-w-[1240px] flex-wrap gap-3 px-5 pb-10 text-[12.5px]"
+      class="mx-auto flex max-w-[1600px] flex-wrap gap-3 px-4 pb-10 text-[12.5px]"
       style="color: var(--bd-ink-soft)"
     >
       <span>One vote per store. Your shop domain is never shown to other merchants.</span>
     </footer>
 
-    <!-- Hosted here rather than in a view, so either tab can raise the same form. -->
+    <!-- Hosted above the router view so it survives a reload of the board below. -->
     <BoardSubmitModal :open="submitOpen" @close="submitOpen = false" />
 
     <!-- toast -->
