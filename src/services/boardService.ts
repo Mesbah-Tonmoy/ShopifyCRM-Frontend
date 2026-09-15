@@ -75,7 +75,7 @@ export interface BoardPaginated<T> {
 export type BoardSort = 'votes' | 'trending' | 'newest' | 'oldest';
 
 /**
- * The orderings offered on both tabs. Kept here beside the filter type so the
+ * The orderings offered on the roadmap. Kept here beside the filter type so the
  * labels and the values the API accepts cannot drift apart.
  */
 export const BOARD_SORT_OPTIONS: readonly { value: BoardSort; label: string }[] = [

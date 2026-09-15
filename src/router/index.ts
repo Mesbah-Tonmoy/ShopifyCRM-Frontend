@@ -25,18 +25,11 @@ const routes = [
     meta: { isPublic: true, isBoard: true },
     children: [
       {
-        // The roadmap leads, and takes the bare path so that embeds already
-        // pointing at /board/{slug} land on it without changing their snippet.
+        // The roadmap is the whole board, and takes the bare path so that
+        // embeds pointing at /board/{slug} land on it unchanged.
         path: '',
         name: 'board-roadmap',
         component: () => import('@/views/board/BoardRoadmapView.vue'),
-        // Columns should use the whole viewport rather than the reading-width cap.
-        meta: { fullWidth: true },
-      },
-      {
-        path: 'requests',
-        name: 'board-requests',
-        component: () => import('@/views/board/BoardRequestsView.vue'),
       },
     ],
   },
