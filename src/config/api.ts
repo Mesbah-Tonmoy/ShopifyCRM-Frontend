@@ -7,6 +7,12 @@ interface ApiResponse<T> {
   data: T;
 }
 
+/** Thrown for a non-2xx response. `errors` carries Laravel's per-field validation messages. */
+export interface ApiError extends Error {
+  status?: number;
+  errors?: Record<string, string[]>;
+}
+
 class ApiService {
   private getHeaders(includeAuth = true): HeadersInit {
     const headers: HeadersInit = {
@@ -28,7 +34,10 @@ class ApiService {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'An error occurred');
+      const error: ApiError = new Error(data.message || 'An error occurred');
+      error.status = response.status;
+      error.errors = data.errors;
+      throw error;
     }
 
     return data;

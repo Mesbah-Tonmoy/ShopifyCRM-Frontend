@@ -287,6 +287,9 @@
     background: var(--bd-border-strong);
     border-radius: 8px;
 }
+.board-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+}
 
 @media (prefers-reduced-motion: reduce) {
     .board-root * {
@@ -880,9 +883,37 @@
   .board-roadmap__columns {
     grid-auto-flow: column;
     grid-auto-columns: minmax(350px, 1fr);
-    overflow-x: auto;
+    /*
+     * Bounded rather than content-height, so the horizontal scrollbar sits in
+     * the same place whatever the columns hold — otherwise it tracks the
+     * tallest column and a busy board hides it below the fold while an empty
+     * one pulls it up under the headings. Tall columns scroll vertically here
+     * instead of growing the page.
+     */
+    height: clamp(420px, calc(100vh - 240px), 900px);
+    overflow: auto;
     /* Room for the scrollbar, so it never sits over the last card. */
     padding-bottom: 8px;
+  }
+
+  /*
+   * Embedded, `vh` measures the iframe — which the host sizes from the height
+   * this board reports — so a viewport-relative height would feed back into
+   * itself and creep. A flat height breaks the loop: the reported height then
+   * settles at a constant and the iframe stops growing.
+   */
+  .board-root[data-embedded='true'] .board-roadmap__columns {
+    height: 640px;
+  }
+
+  /*
+   * The heading stays put while its own column scrolls under it. Opaque
+   * already, so the cards pass behind rather than through.
+   */
+  .board-column__head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
 }
 
