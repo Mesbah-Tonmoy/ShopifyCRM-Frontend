@@ -1069,6 +1069,20 @@
 }
 
 /*
+ * Awaiting review is a state, not a decoration like Pinned, so it takes the
+ * caution palette rather than the neutral chip. The tokens are redefined for
+ * the dark theme and resolve at use, so this follows it without a second rule.
+ */
+.board-card__chip--review {
+  background: var(--bd-caution-wash);
+  color: var(--bd-caution);
+}
+
+.board-card__chip--review svg {
+  fill: var(--bd-caution);
+}
+
+/*
  * What the team has said about the request, kept below a hairline so it is
  * read as an update rather than as more of the merchant's own description.
  */

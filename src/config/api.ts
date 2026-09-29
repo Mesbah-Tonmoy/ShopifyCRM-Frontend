@@ -93,10 +93,16 @@ class ApiService {
     return this.handleResponse<T>(response);
   }
 
-  async delete<T>(endpoint: string, includeAuth = true): Promise<ApiResponse<T>> {
+  /**
+   * `body` is optional because most deletes address the resource in the path.
+   * Some need a payload instead - deleting a store's SES tenants is keyed by
+   * shop domain, which does not belong in a URL path segment.
+   */
+  async delete<T>(endpoint: string, body?: unknown, includeAuth = true): Promise<ApiResponse<T>> {
     const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'DELETE',
       headers: this.getHeaders(includeAuth),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
     return this.handleResponse<T>(response);

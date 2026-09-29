@@ -383,7 +383,7 @@ const inputClasses =
 
         <div v-if="canEdit" class="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-gray-100">
           <p v-if="!selected.is_configured && !selectedDirty" class="text-xs text-gray-500 mr-auto">
-            Fill in {{ selected.missing.map((k) => labelFor(selected!, k)).join(', ') }} to activate.
+            Fill in {{ selected.missing.map((k: string) => labelFor(selected!, k)).join(', ') }} to activate.
           </p>
           <p v-else-if="selectedDirty" class="text-xs text-amber-700 mr-auto">Unsaved changes</p>
 
