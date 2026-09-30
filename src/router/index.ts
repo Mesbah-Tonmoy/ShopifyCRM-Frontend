@@ -74,6 +74,18 @@ const routes = [
         meta: { permission: 'integrations.view' }
       },
       {
+        path: 'smtp-setup',
+        name: 'smtp-setup',
+        component: () => import('@/views/SmtpProvidersPage.vue'),
+        meta: { permission: 'smtp.view' }
+      },
+      {
+        path: 'ses-tenants',
+        name: 'ses-tenants',
+        component: () => import('@/views/SesTenantsPage.vue'),
+        meta: { permission: 'ses_tenants.view' }
+      },
+      {
         path: 'email-templates',
         name: 'email-templates',
         component: () => import('@/views/EmailTemplatesPage.vue'),

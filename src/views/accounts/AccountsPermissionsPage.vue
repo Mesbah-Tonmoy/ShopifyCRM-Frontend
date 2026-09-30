@@ -103,6 +103,8 @@ const permissionGroups = computed<Record<string, { title: string, permissions: P
     pricing_plans: { title: 'Pricing Plans', permissions: [] },
     integrations: { title: 'Integrations', permissions: [] },
     features: { title: 'Features', permissions: [] },
+    smtp: { title: 'SMTP Setup', permissions: [] },
+    ses_tenants: { title: 'SES Tenants', permissions: [] },
   };
 
   allPermissions.value.forEach(p => {
@@ -509,6 +511,63 @@ onMounted(fetchInitialData);
                 </label>
                 <label
                   v-for="perm in permissionGroups.features.permissions"
+                  :key="perm.id"
+                  class="flex items-center group cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
+                    :checked="isPermissionSelected(perm.id)"
+                    @change="togglePermission(perm.id)"
+                  >
+                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Permissions: SMTP Setup -->
+            <div class="space-y-4" v-if="permissionGroups.smtp">
+              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.smtp.title }}</h3>
+              <div class="space-y-3">
+                <label class="flex items-center group cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
+                    :checked="isGroupSelected(permissionGroups.smtp.permissions)"
+                    @change="toggleGroup(permissionGroups.smtp.permissions)"
+                  >
+                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
+                </label>
+                <label
+                  v-for="perm in permissionGroups.smtp.permissions"
+                  :key="perm.id"
+                  class="flex items-center group cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
+                    :checked="isPermissionSelected(perm.id)"
+                    @change="togglePermission(perm.id)"
+                  >
+                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
+                </label>
+              </div>
+            </div>
+            <!-- Group: SES Tenants -->
+            <div class="space-y-4" v-if="permissionGroups.ses_tenants">
+              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.ses_tenants.title }}</h3>
+              <div class="space-y-3">
+                <label class="flex items-center group cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
+                    :checked="isGroupSelected(permissionGroups.ses_tenants.permissions)"
+                    @change="toggleGroup(permissionGroups.ses_tenants.permissions)"
+                  >
+                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
+                </label>
+                <label
+                  v-for="perm in permissionGroups.ses_tenants.permissions"
                   :key="perm.id"
                   class="flex items-center group cursor-pointer"
                 >

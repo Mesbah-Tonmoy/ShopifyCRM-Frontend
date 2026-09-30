@@ -545,7 +545,7 @@ const goToPage = (page: number) => {
       :request="activeRequest"
       :loading="drawerLoading"
       @close="drawerOpen = false"
-      @change-status="(status) => activeRequest && askStatusChange(activeRequest, status)"
+      @change-status="(status: FeatureRequestStatus) => activeRequest && askStatusChange(activeRequest, status)"
       @save-note="saveAdminNote"
       @save-response="savePublicResponse"
       @toggle-hidden="toggleHidden"

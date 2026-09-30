@@ -25,6 +25,11 @@ export interface BoardRequest {
     status: FeatureRequestStatus;
     status_label: string;
     status_note: string | null;
+    /**
+     * Held for review: on this board for its submitter and for nobody else.
+     * Without saying so the card is indistinguishable from a published one.
+     */
+    is_awaiting_review: boolean;
     votes_count: number | null;
     has_voted: boolean;
     is_subscribed: boolean;

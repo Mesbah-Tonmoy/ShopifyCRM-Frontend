@@ -23,7 +23,18 @@ const loading = ref(false);
 const saving = ref(false);
 const revealedSecret = ref<string | null>(null);
 
-const TOGGLES: { key: keyof BoardSettings; label: string; hint: string }[] = [
+/**
+ * `requires` marks a toggle that only does anything while another is on. It
+ * stays visible and keeps its stored value, so turning review back on restores
+ * the choice rather than silently losing it.
+ */
+const TOGGLES: {
+  key: keyof BoardSettings;
+  label: string;
+  hint: string;
+  requires?: keyof BoardSettings;
+  blockedHint?: string;
+}[] = [
   { key: 'is_enabled', label: 'Board is live', hint: 'Turn off to take the board down without losing anything.' },
   { key: 'allow_submissions', label: 'Accept new requests', hint: 'Merchants can submit ideas.' },
   { key: 'allow_voting', label: 'Accept votes', hint: 'Merchants can back existing requests.' },
@@ -35,7 +46,17 @@ const TOGGLES: { key: keyof BoardSettings; label: string; hint: string }[] = [
   },
   { key: 'show_vote_counts', label: 'Show vote counts', hint: 'Merchants see how many stores backed each request.' },
   { key: 'notify_on_status_change', label: 'Email on status change', hint: 'Tell merchants when something they backed moves.' },
+  {
+    key: 'notify_on_approval',
+    label: 'Email on approval',
+    hint: 'Tell the store that asked when their request is approved and goes live on the board.',
+    requires: 'require_approval',
+    blockedHint: 'Needs "Review before publishing". Without review a request is public as soon as it is submitted, so there is no approval to announce.',
+  },
 ];
+
+const isToggleAvailable = (toggle: (typeof TOGGLES)[number]): boolean =>
+  !toggle.requires || Boolean(settings.value?.[toggle.requires]);
 
 onMounted(async () => {
   if (!appsStore.apps.length) await appsStore.fetchApps(1, 100);
@@ -266,18 +287,43 @@ $token = $payload . '.' . hash_hmac('sha256', $payload, env('CRM_BOARD_SECRET'))
           <h2 class="mb-4 text-h4 font-semibold text-dark">Behaviour</h2>
 
           <div class="space-y-3">
-            <label v-for="toggle in TOGGLES" :key="String(toggle.key)" class="flex items-start gap-3">
+            <label
+              v-for="toggle in TOGGLES"
+              :key="String(toggle.key)"
+              class="flex items-start gap-3"
+              :class="isToggleAvailable(toggle) ? '' : 'opacity-60'"
+            >
               <input
                 type="checkbox"
                 class="mt-1 h-4 w-4 accent-primary"
                 :checked="Boolean(settings[toggle.key])"
+                :disabled="!isToggleAvailable(toggle)"
                 @change="(settings[toggle.key] as boolean) = ($event.target as HTMLInputElement).checked"
               />
               <span>
                 <span class="block text-b4 font-semibold text-dark">{{ toggle.label }}</span>
-                <span class="block text-b6 text-light">{{ toggle.hint }}</span>
+                <span class="block text-b6 text-light">
+                  {{ isToggleAvailable(toggle) ? toggle.hint : toggle.blockedHint }}
+                </span>
               </span>
             </label>
+
+            <div class="pt-2">
+              <label for="new-request-email" class="mb-1.5 block text-b4 font-semibold text-dark">
+                Email me about new requests
+              </label>
+              <input
+                id="new-request-email"
+                v-model="settings.new_request_email"
+                type="email"
+                maxlength="255"
+                placeholder="team@example.com"
+                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
+              />
+              <p class="mt-1 text-b6 text-light">
+                Sent whenever a merchant submits a request. Leave blank to turn it off.
+              </p>
+            </div>
 
             <div class="flex items-center gap-3 pt-2">
               <label for="limit" class="text-b4 text-mid">Requests per store per day</label>

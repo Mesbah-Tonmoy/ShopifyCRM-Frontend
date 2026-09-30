@@ -118,6 +118,9 @@ export interface BoardSettings {
     require_approval: boolean;
     show_vote_counts: boolean;
     notify_on_status_change: boolean;
+    /** Blank turns the new-request heads-up off; there is no separate flag. */
+    new_request_email: string | null;
+    notify_on_approval: boolean;
     submission_limit_per_day: number;
     visible_statuses: FeatureRequestStatus[] | null;
     theme: Record<string, unknown> | null;

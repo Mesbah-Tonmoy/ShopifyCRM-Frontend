@@ -176,6 +176,18 @@ const toggleSubscription = async () => {
           <div class="board-meta min-w-0 flex-1">
             <BoardStatusChip :status="request.status" :label="request.status_label" />
 
+            <!--
+              Repeated from the card on purpose: this is where a merchant reads
+              the request in full, and losing the notice on the way in would
+              leave them believing it is already public.
+            -->
+            <span
+              v-if="request.is_awaiting_review"
+              class="board-card__chip board-card__chip--review"
+            >
+              Awaiting review - only you can see this
+            </span>
+
             <div class="board-meta__line">
               <span v-if="request.submitter_name">{{ request.submitter_name }}</span>
               <span v-if="request.created_at">{{ formatDate(request.created_at) }}</span>
