@@ -11,6 +11,7 @@ import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths } 
 import { exportToCSV } from '@/utils/export';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import type { Installation } from '@/types';
 
 const installationsStore = useInstallationsStore();
 const authStore = useAuthStore();
@@ -23,7 +24,9 @@ const sortBy = ref<string>('installed_at');
 const sortOrder = ref<'asc' | 'desc'>('desc');
 const currentPage = ref(1);
 const perPage = ref(50);
-const totalInstallations = ref(0);
+
+// Set when the list is opened for one app from the sidebar
+const appId = computed(() => route.query.app_id ? Number(route.query.app_id) : undefined);
 
 // Filter States
 const selectedPlans = ref<string[]>([]);
@@ -31,6 +34,18 @@ const selectedShopifyPlans = ref<string[]>([]);
 const selectedStatuses = ref<boolean[]>([]);
 const installCountMin = ref<number | null>(null);
 const installCountMax = ref<number | null>(null);
+
+// Which advanced filter sections are expanded
+const openSections = ref({
+  status: true,
+  plans: true,
+  shopifyPlans: true,
+  installCount: true,
+});
+
+const toggleSection = (section: keyof typeof openSections.value) => {
+  openSections.value[section] = !openSections.value[section];
+};
 
 // Options from Store
 const appPlanOptions = computed(() => 
@@ -66,34 +81,32 @@ const handleDateChange = (newDate: Date[] | null) => {
     // Both dates selected - fetch data
     dateFrom.value = dayjs(newDate[0]).format('YYYY-MM-DD');
     dateTo.value = dayjs(newDate[1]).format('YYYY-MM-DD');
-    currentPage.value = 1;
-    fetchData();
+    applyFilters();
   } else if (!newDate || newDate.length === 0) {
     // Dates cleared - fetch all data
     dateFrom.value = '';
     dateTo.value = '';
-    currentPage.value = 1;
-    fetchData();
+    applyFilters();
   }
   // Don't fetch when only one date is selected (length === 1)
 };
 
 onMounted(() => {
   fetchData();
-  installationsStore.fetchFilters();
+  installationsStore.fetchFilters(appId.value);
 });
 
-// Watch for route query changes (when clicking apps in Sidebar)
-watch(() => route.query.app_id, () => {
-  currentPage.value = 1;
-  fetchData();
+// Switching app from the sidebar: the plan options change with it, so a plan
+// picked for the previous app would only empty the list.
+watch(appId, () => {
+  selectedPlans.value = [];
+  selectedShopifyPlans.value = [];
+  applyFilters();
+  installationsStore.fetchFilters(appId.value);
 });
 
 // Watch for per page changes and refetch
-watch(perPage, () => {
-  currentPage.value = 1;
-  fetchData();
-});
+watch(perPage, () => applyFilters());
 
 const dateRangePlaceholderText = computed(() => {
   const firstDay = dayjs().startOf('month');
@@ -122,11 +135,11 @@ const presetDates = ref([
 ]);
 
 const setDateRange = (direction: 'previous' | 'next') => {
-    let currentRange = date.value;
+    const currentRange = date.value;
     if (!currentRange || currentRange.length < 2) return;
     
-    let startDate = currentRange[0];
-    let endDate = currentRange[1];
+    const startDate = currentRange[0];
+    const endDate = currentRange[1];
 
     if (direction === 'previous') {
         date.value = [
@@ -157,34 +170,23 @@ const fetchData = async () => {
     plan_name: selectedPlans.value.length ? selectedPlans.value : undefined,
     shopify_plans: selectedShopifyPlans.value.length ? selectedShopifyPlans.value : undefined,
     is_active: selectedStatuses.value.length === 1 ? selectedStatuses.value[0] : undefined,
-    install_count_min: installCountMin.value !== null ? installCountMin.value : undefined,
-    install_count_max: installCountMax.value !== null ? installCountMax.value : undefined,
-    app_id: route.query.app_id ? Number(route.query.app_id) : undefined,
+    // v-model.number leaves '' behind when a box is cleared
+    install_count_min: typeof installCountMin.value === 'number' ? installCountMin.value : undefined,
+    install_count_max: typeof installCountMax.value === 'number' ? installCountMax.value : undefined,
+    app_id: appId.value,
   });
-  
-  // Update total from API response
-  if (installationsStore.pagination) {
-    totalInstallations.value = installationsStore.pagination.total;
-  }
 };
 
-const handleSearch = () => {
+// Any filter change can shrink the result below the current page, so start
+// again from page 1 (staying on page 3 of a 1-page result showed nothing).
+const applyFilters = () => {
   currentPage.value = 1;
   fetchData();
 };
 
 const clearSearch = () => {
   searchQuery.value = '';
-  currentPage.value = 1;
-  fetchData();
-};
-
-const clearDates = () => {
-  date.value = null;
-  dateFrom.value = '';
-  dateTo.value = '';
-  currentPage.value = 1;
-  fetchData();
+  applyFilters();
 };
 
 const resetFilters = () => {
@@ -193,8 +195,7 @@ const resetFilters = () => {
   selectedStatuses.value = [];
   installCountMin.value = null;
   installCountMax.value = null;
-  currentPage.value = 1;
-  fetchData();
+  applyFilters();
 };
 
 const handleSort = (column: string) => {
@@ -204,7 +205,7 @@ const handleSort = (column: string) => {
     sortBy.value = column;
     sortOrder.value = 'asc';
   }
-  fetchData();
+  applyFilters();
 };
 
 const handleExport = () => {
@@ -217,7 +218,7 @@ const handleExport = () => {
   const headers = ['App', 'Store', 'Email', 'Plan', 'Shopify Plan', 'Status', 'Installs', 'Installed'];
   
   // Map data to rows
-  const rows = paginatedInstallations.value.map((item: any) => [
+  const rows = paginatedInstallations.value.map((item: Installation) => [
     item.app?.app_name || 'N/A',
     item.store_name,
     item.email,
@@ -326,7 +327,7 @@ const getPlanDetails = (appPlan: string | null) => {
         const trialDays = data.trial_days || 0;
         const isAnnual = name.toLowerCase().includes('annual');
         
-        const expiryDate = startDate.add(trialDays, 'day').add(isAnnual ? 1 : 1, isAnnual ? 'year' : 'month');
+        const expiryDate = startDate.add(trialDays, 'day').add(1, isAnnual ? 'year' : 'month');
         validity = expiryDate.format('MMM DD, YYYY');
       }
 
@@ -337,8 +338,8 @@ const getPlanDetails = (appPlan: string | null) => {
         isDetailed: true
       };
     }
-  } catch (e) {
-    // Fallback
+  } catch {
+    // Not JSON: fall through to the plain plan name
   }
   
   return { name: appPlan || 'No plan', isDetailed: false };
@@ -365,61 +366,70 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
              <button @click="resetFilters" class="text-sm text-teal hover:text-teal-dark font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-90">Reset</button>
           </div>
 
-          <!-- App Plan Filter -->
+          <!-- Status Filter -->
           <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
-               <i class="icon-list-regular"></i>
-               Plans
-            </h4>
-            <div>
-               <label v-for="plan in appPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="plan.value" v-model="selectedPlans" @change="fetchData" class="h-4 w-4 mr-2 mt-[2px]">
-                 <span class="text-sm">{{ plan.label }}</span>
-               </label>
-            </div>
-          </div>
-
-          <!-- Shopify Plan Filter -->
-          <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-               Shopify Plan
-            </h4>
-            <div>
-               <label v-for="plan in shopifyPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="plan.value" v-model="selectedShopifyPlans" @change="fetchData" class="h-4 w-4 mr-2 mt-[3px]">
-                 <span class="text-sm">{{ plan.label }}</span>
-               </label>
-            </div>
-          </div>
-
-           <!-- Status Filter -->
-          <div class="mb-4">
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background">
+            <button type="button" @click="toggleSection('status')" :aria-expanded="openSections.status" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-               Status
-            </h4>
-            <div>
+               <span class="flex-1 text-left">Status</span>
+               <span v-if="selectedStatuses.length" class="text-xs font-semibold text-teal">{{ selectedStatuses.length }}</span>
+               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.status ? 'rotate-180' : '']" />
+            </button>
+            <div v-show="openSections.status">
                <label v-for="status in statusOptions" :key="String(status.value)" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="status.value" v-model="selectedStatuses" @change="fetchData" class="h-4 w-4 mr-2 mt-[2px]">
+                 <input type="checkbox" :value="status.value" v-model="selectedStatuses" @change="applyFilters" class="h-4 w-4 mr-2 mt-[2px]">
                  <span class="text-sm">{{ status.label }}</span>
                </label>
             </div>
           </div>
 
+          <!-- App Plan Filter -->
+          <div class="mb-4">
+            <button type="button" @click="toggleSection('plans')" :aria-expanded="openSections.plans" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
+               <i class="icon-list-regular"></i>
+               <span class="flex-1 text-left">Plans</span>
+               <span v-if="selectedPlans.length" class="text-xs font-semibold text-teal">{{ selectedPlans.length }}</span>
+               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.plans ? 'rotate-180' : '']" />
+            </button>
+            <div v-show="openSections.plans">
+               <label v-for="plan in appPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
+                 <input type="checkbox" :value="plan.value" v-model="selectedPlans" @change="applyFilters" class="h-4 w-4 mr-2 mt-[2px]">
+                 <span class="text-sm">{{ plan.label }}</span>
+               </label>
+               <p v-if="appPlanOptions.length === 0" class="py-[5px] px-[10px] text-sm text-gray-400 italic">No plans</p>
+            </div>
+          </div>
+
+          <!-- Shopify Plan Filter -->
+          <div class="mb-4">
+            <button type="button" @click="toggleSection('shopifyPlans')" :aria-expanded="openSections.shopifyPlans" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
+               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+               <span class="flex-1 text-left">Shopify Plan</span>
+               <span v-if="selectedShopifyPlans.length" class="text-xs font-semibold text-teal">{{ selectedShopifyPlans.length }}</span>
+               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.shopifyPlans ? 'rotate-180' : '']" />
+            </button>
+            <div v-show="openSections.shopifyPlans">
+               <label v-for="plan in shopifyPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
+                 <input type="checkbox" :value="plan.value" v-model="selectedShopifyPlans" @change="applyFilters" class="h-4 w-4 mr-2 mt-[3px]">
+                 <span class="text-sm">{{ plan.label }}</span>
+               </label>
+               <p v-if="shopifyPlanOptions.length === 0" class="py-[5px] px-[10px] text-sm text-gray-400 italic">No Shopify plans</p>
+            </div>
+          </div>
+
            <!-- Install Count Filter -->
           <div>
-            <h4 class="flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background">
+            <button type="button" @click="toggleSection('installCount')" :aria-expanded="openSections.installCount" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background cursor-pointer">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
-               Install Count
-            </h4>
-            <div class="flex items-center gap-2">
+               <span class="flex-1 text-left">Install Count</span>
+               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.installCount ? 'rotate-180' : '']" />
+            </button>
+            <div v-show="openSections.installCount" class="flex items-center gap-2">
                 <input 
                     type="number" 
                     name="install_count_min"
                     placeholder="Min" 
                     v-model.number="installCountMin" 
-                    @change="fetchData"
+                    @change="applyFilters"
                     class="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-teal focus:border-teal"
                 >
                 <span class="text-gray-400">-</span>
@@ -428,7 +438,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     name="install_count_max"
                     placeholder="Max" 
                     v-model.number="installCountMax" 
-                    @change="fetchData"
+                    @change="applyFilters"
                     class="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-teal focus:border-teal"
                 >
             </div>
@@ -455,7 +465,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   name="search"
                   placeholder="Search"
                   class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-teal focus:border-teal sm:text-sm"
-                  @keyup.enter="handleSearch"
+                  @keyup.enter="applyFilters"
                 />
                 <!-- Clear button (shows when there's text) -->
                 <button
@@ -472,7 +482,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
               
                <!-- Total Count -->
                <div class="text-sm font-medium text-gray-700 whitespace-nowrap">
-                 Showing <span class="font-semibold text-teal">{{ totalInstallations.toLocaleString() }}</span> items
+                 Showing <span class="font-semibold text-teal">{{ (installationsStore.pagination?.total ?? 0).toLocaleString() }}</span> items
                </div>
             </div>
 
@@ -566,6 +576,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
               <thead class="bg-gray-50">
                 <tr>
                   <th 
+                    v-if="!appId"
                     scope="col" 
                     class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
                     @click="handleSort('app_name')"
@@ -658,7 +669,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
               <tbody class="bg-white divide-y divide-gray-200">
                 <template v-if="installationsStore.loading">
                   <tr v-for="i in 5" :key="i">
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
+                    <td v-if="!appId" class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="150px" height="16px" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="200px" height="16px" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="24px" custom-class="rounded-full" /></td>
@@ -669,7 +680,7 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   </tr>
                 </template>
                 <tr v-else v-for="installation in paginatedInstallations" :key="installation.id" class="hover:bg-gray-50">
-                  <td class="px-6 py-4 whitespace-nowrap">
+                  <td v-if="!appId" class="px-6 py-4 whitespace-nowrap">
                     <div class="text-sm font-medium text-gray-900">{{ installation.app?.app_name || 'N/A' }}</div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
@@ -754,7 +765,6 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     v-model.number="perPage"
                     class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-teal focus:border-teal"
                   >
-                    <option :value="1">1</option>
                     <option :value="25">25</option>
                     <option :value="50">50</option>
                     <option :value="100">100</option>

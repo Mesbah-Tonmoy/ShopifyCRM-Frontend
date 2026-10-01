@@ -126,7 +126,7 @@ const getTemplateTypeName = (type: string) => {
   const types: Record<string, string> = {
     'install': 'Install Welcome',
     'uninstall': 'Uninstall Feedback',
-    'after_7_days': 'After 7 Days'
+    '7_day_followup': '7-Day Follow-up'
   };
   return types[type] || type;
 };
