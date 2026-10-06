@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import Swal from 'sweetalert2';
-import { emailTemplateService, type EmailTemplate as ApiEmailTemplate } from '@/services/emailTemplateService';
+import {
+  emailTemplateService,
+  type EmailTemplate as ApiEmailTemplate,
+  type EmailTemplateFilterOptions,
+} from '@/services/emailTemplateService';
 import { useAuthStore } from '@/stores/auth';
 import { Toast } from '@/utils/toast';
 import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
@@ -9,16 +13,16 @@ import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import Pagination from '@/components/common/Pagination.vue';
 
 interface EmailTemplate extends ApiEmailTemplate {
   app_name?: string;
   template_name?: string;
-  template_type?: string;
 }
 
 const templates = ref<EmailTemplate[]>([]);
 const loading = ref(false);
-const error = ref<string | null>(null);
+const saving = ref(false);
 const showEditModal = ref(false);
 const showPreviewModal = ref(false);
 const editingTemplate = ref<EmailTemplate | null>(null);
@@ -28,38 +32,85 @@ const selectedTemplateType = ref<string | null>(null);
 const searchQuery = ref('');
 const authStore = useAuthStore();
 
+// Filter dropdown options come from their own endpoint: deriving them from the
+// rows on screen would only ever list what fits on the current page.
+const filterOptions = ref<EmailTemplateFilterOptions>({ apps: [], types: [] });
+
+const currentPage = ref(1);
+const perPage = ref(15);
+const lastPage = ref(1);
+const total = ref(0);
+const rangeFrom = ref<number | null>(null);
+const rangeTo = ref<number | null>(null);
+
 onMounted(() => {
+  fetchFilterOptions();
   fetchTemplates();
 });
 
-// Watch filter changes and refetch
-watch([selectedAppId, selectedTemplateType], () => {
+// Filtering narrows the result set, so the current page number no longer means
+// anything - go back to the first page before refetching.
+watch([selectedAppId, selectedTemplateType, perPage], () => {
+  currentPage.value = 1;
   fetchTemplates();
 });
+
+// Search runs on the server now that the list is paginated, so it is debounced
+// rather than fired on every keystroke.
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+watch(searchQuery, () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    currentPage.value = 1;
+    fetchTemplates();
+  }, 350);
+});
+
+const fetchFilterOptions = async () => {
+  try {
+    const response = await emailTemplateService.getFilterOptions();
+    if (response.success && response.data) {
+      filterOptions.value = response.data;
+    }
+  } catch (err) {
+    // Non-fatal: the table still loads, the dropdowns are just empty.
+    console.error('Error fetching template filter options:', err);
+  }
+};
 
 const fetchTemplates = async () => {
   try {
     loading.value = true;
-    error.value = null;
-    
-    const filters: any = {};
+
+    const filters: Record<string, string | number> = {
+      page: currentPage.value,
+      per_page: perPage.value,
+    };
+
     if (selectedAppId.value) filters.app_id = selectedAppId.value;
     if (selectedTemplateType.value) filters.type = selectedTemplateType.value;
-    
+    if (searchQuery.value.trim()) filters.search = searchQuery.value.trim();
+
     const response = await emailTemplateService.getAll(filters);
-    
+
     if (response.success && response.data) {
-      // Map API response to frontend format
-      templates.value = response.data.data.map(template => ({
+      const page = response.data;
+
+      templates.value = page.data.map(template => ({
         ...template,
         app_name: template.app?.app_name || 'Unknown App',
-        template_type: template.type as any,
-        template_name: getTemplateTypeName(template.type)
+        template_name: getTemplateTypeName(template.type),
       }));
+
+      currentPage.value = page.current_page;
+      lastPage.value = page.last_page;
+      total.value = page.total;
+      rangeFrom.value = page.from;
+      rangeTo.value = page.to;
     }
   } catch (err: any) {
     const errorMessage = err.message || 'Failed to load email templates';
-    error.value = errorMessage;
     console.error('Error fetching templates:', err);
     Swal.fire({
       icon: 'error',
@@ -71,64 +122,23 @@ const fetchTemplates = async () => {
   }
 };
 
-// Get unique apps from templates
-const uniqueApps = computed(() => {
-  const apps = new Map<number, { id: number; name: string }>();
-  templates.value.forEach(template => {
-    if (!apps.has(template.app_id)) {
-      apps.set(template.app_id, { id: template.app_id, name: template.app_name || 'Unknown' });
-    }
-  });
-  return Array.from(apps.values());
-});
+const goToPage = (page: number) => {
+  currentPage.value = page;
+  fetchTemplates();
+};
 
-// Get unique template types from templates
-const uniqueTemplateTypes = computed(() => {
-  const types = new Set<string>();
-  templates.value.forEach(template => {
-    types.add(template.type);
-  });
-  return Array.from(types).map(type => ({
-    value: type,
-    name: getTemplateTypeName(type)
-  }));
-});
-
-// Filter templates based on selected app and template type
-const filteredTemplates = computed(() => {
-  let filtered = templates.value;
-  
-  // Filter by app
-  if (selectedAppId.value !== null) {
-    filtered = filtered.filter(template => template.app_id === selectedAppId.value);
-  }
-  
-  // Filter by template type
-  if (selectedTemplateType.value !== null) {
-    filtered = filtered.filter(template => template.type === selectedTemplateType.value);
-  }
-  
-  // Search query filter
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase();
-    filtered = filtered.filter(template => 
-      template.subject.toLowerCase().includes(query) ||
-      template.app_name?.toLowerCase().includes(query) ||
-      template.template_name?.toLowerCase().includes(query) ||
-      template.type.toLowerCase().includes(query)
-    );
-  }
-  
-  return filtered;
-});
-
+/**
+ * Label for a template type, using the names the API supplies so the admin and
+ * the board agree on what each template is called.
+ */
 const getTemplateTypeName = (type: string) => {
-  const types: Record<string, string> = {
-    'install': 'Install Welcome',
-    'uninstall': 'Uninstall Feedback',
-    '7_day_followup': '7-Day Follow-up'
-  };
-  return types[type] || type;
+  const match = filterOptions.value.types.find(option => option.value === type);
+  if (match) return match.label;
+
+  return type
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 
 const getShortBody = (body: string, maxLength: number = 100) => {
@@ -160,21 +170,18 @@ const saveTemplate = async () => {
   if (!editingTemplate.value) return;
 
   try {
-    loading.value = true;
-    
-    // Update template via API
+    saving.value = true;
+
     await emailTemplateService.update(editingTemplate.value.id, {
       subject: editingTemplate.value.subject,
       body: editingTemplate.value.body,
       is_active: editingTemplate.value.is_active,
     });
 
-    // Refresh templates list
     await fetchTemplates();
-    
+
     closeEditModal();
 
-    // Show success toast
     Toast.fire({
       icon: 'success',
       title: 'Template Updated!',
@@ -188,7 +195,7 @@ const saveTemplate = async () => {
       text: errorMessage,
     });
   } finally {
-    loading.value = false;
+    saving.value = false;
   }
 };
 </script>
@@ -213,11 +220,11 @@ const saveTemplate = async () => {
           <SelectInput
             v-model="selectedAppId"
             label="App"
-            placeholder="Select App"
+            placeholder="All Apps"
             select-class="w-48"
           >
-            <option v-for="app in uniqueApps" :key="app.id" :value="app.id">
-              {{ app.name }}
+            <option v-for="app in filterOptions.apps" :key="app.id" :value="app.id">
+              {{ app.app_name }}
             </option>
           </SelectInput>
 
@@ -225,11 +232,11 @@ const saveTemplate = async () => {
           <SelectInput
             v-model="selectedTemplateType"
             label="Type"
-            placeholder="Select Type"
-            select-class="w-48"
+            placeholder="All Types"
+            select-class="w-56"
           >
-            <option v-for="type in uniqueTemplateTypes" :key="type.value" :value="type.value">
-              {{ type.name }}
+            <option v-for="type in filterOptions.types" :key="type.value" :value="type.value">
+              {{ type.label }}
             </option>
           </SelectInput>
         </div>
@@ -271,7 +278,7 @@ const saveTemplate = async () => {
                 </td>
               </tr>
             </template>
-            <tr v-else-if="filteredTemplates.length === 0">
+            <tr v-else-if="templates.length === 0">
               <td colspan="6" class="py-20 text-center text-gray-400">
                 <svg class="w-12 h-12 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -280,7 +287,7 @@ const saveTemplate = async () => {
               </td>
             </tr>
             <template v-else>
-              <tr v-for="template in filteredTemplates" :key="template.id" class="hover:bg-gray-50/50 transition-colors">
+              <tr v-for="template in templates" :key="template.id" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">{{ template.app_name }}</div>
               </td>
@@ -330,6 +337,19 @@ const saveTemplate = async () => {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        v-if="!loading && total > 0"
+        :current-page="currentPage"
+        :last-page="lastPage"
+        :per-page="perPage"
+        :total="total"
+        :from="rangeFrom"
+        :to="rangeTo"
+        item-label="templates"
+        @update:current-page="goToPage"
+        @update:per-page="perPage = $event"
+      />
     </div>
 
     <!-- Edit Modal -->
@@ -407,11 +427,11 @@ const saveTemplate = async () => {
             </button>
             <button
               @click="saveTemplate"
-              :disabled="loading"
+              :disabled="saving"
               class="px-6 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              <LoadingIcon v-if="loading" size="sm" color-class="text-white" />
-              {{ loading ? 'Saving...' : 'Save Template' }}
+              <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
+              {{ saving ? 'Saving...' : 'Save Template' }}
             </button>
           </div>
         </div>

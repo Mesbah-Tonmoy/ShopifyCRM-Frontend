@@ -32,7 +32,14 @@ export interface PaginatedResponse<T> {
         last_page: number;
         per_page: number;
         total: number;
+        from: number | null;
+        to: number | null;
     };
+}
+
+export interface EmailTemplateFilterOptions {
+    apps: { id: number; app_name: string }[];
+    types: { value: string; label: string }[];
 }
 
 export interface ApiResponse<T> {
@@ -42,6 +49,12 @@ export interface ApiResponse<T> {
 }
 
 export const emailTemplateService = {
+    // Options for the filter dropdowns. Served separately from the paginated
+    // list so the dropdowns cover every app and type, not just this page.
+    async getFilterOptions(): Promise<ApiResponse<EmailTemplateFilterOptions>> {
+        return apiService.get<EmailTemplateFilterOptions>('/email-templates/filters') as Promise<ApiResponse<EmailTemplateFilterOptions>>;
+    },
+
     // Get all email templates with filters
     async getAll(filters?: EmailTemplateFilters): Promise<PaginatedResponse<EmailTemplate>> {
         const params = new URLSearchParams();

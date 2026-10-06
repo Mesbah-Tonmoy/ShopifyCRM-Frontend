@@ -19,6 +19,7 @@ const route = useRoute();
 const appsStore = useAppsStore();
 const accountsExpanded = ref(false);
 const installationsExpanded = ref(false);
+const featureRequestsExpanded = ref(false);
 
 const autoExpandActiveMenus = () => {
   if (isAccountsActive.value) {
@@ -26,6 +27,9 @@ const autoExpandActiveMenus = () => {
   }
   if (isInstallationsActive.value) {
     installationsExpanded.value = true;
+  }
+  if (isFeatureRequestsActive.value) {
+    featureRequestsExpanded.value = true;
   }
 };
 
@@ -48,6 +52,7 @@ const toggleSidebar = () => {
   if (isCollapsed.value) {
     accountsExpanded.value = false;
     installationsExpanded.value = false;
+    featureRequestsExpanded.value = false;
   }
 };
 
@@ -63,6 +68,12 @@ const toggleAccountsMenu = () => {
   }
 };
 
+const toggleFeatureRequestsMenu = () => {
+  if (!isCollapsed.value) {
+    featureRequestsExpanded.value = !featureRequestsExpanded.value;
+  }
+};
+
 const isActiveRoute = (routeName: string) => {
   return route.name === routeName;
 };
@@ -73,6 +84,10 @@ const isAccountsActive = computed(() => {
 
 const isInstallationsActive = computed(() => {
   return route.name === 'installations';
+});
+
+const isFeatureRequestsActive = computed(() => {
+  return route.name === 'feature-requests' || route.name === 'board-settings';
 });
 
 const navigationItems = [
@@ -93,12 +108,6 @@ const navigationItems = [
     route: 'email-templates',
     icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
     permission: 'email_templates.view',
-  },
-  {
-    name: 'Feature Requests',
-    route: 'feature-requests',
-    icon: 'M7 8h10M7 12h6m-6 8l-3-3V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H10l-3 3z',
-    permission: 'feature_requests.view',
   },
   {
     name: "What's New",
@@ -132,6 +141,14 @@ const navigationItems = [
   },
 ];
 
+const FEATURE_REQUESTS_ICON =
+  'M7 8h10M7 12h6m-6 8l-3-3V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H10l-3 3z';
+
+const featureRequestsSubMenu = [
+  { name: 'All Requests', route: 'feature-requests', permission: 'feature_requests.view' },
+  { name: 'Board Settings', route: 'board-settings', permission: 'board_settings.edit' },
+];
+
 const accountsSubMenu = [
   { name: 'Users', route: 'accounts-users', permission: 'users.view' },
   { name: 'Permissions', route: 'accounts-permissions', permission: 'permissions.view' },
@@ -144,6 +161,10 @@ const filteredNavigationItems = computed(() => {
 
 const filteredAccountsSubMenu = computed(() => {
   return accountsSubMenu.filter(item => !item.permission || authStore.hasPermission(item.permission));
+});
+
+const filteredFeatureRequestsSubMenu = computed(() => {
+  return featureRequestsSubMenu.filter(item => !item.permission || authStore.hasPermission(item.permission));
 });
 </script>
 
@@ -214,6 +235,68 @@ const filteredAccountsSubMenu = computed(() => {
             {{ item.name }}
           </span>
         </router-link>
+
+        <!-- Feature Requests with Submenu -->
+        <div v-if="filteredFeatureRequestsSubMenu.length > 0">
+          <button
+            @click="toggleFeatureRequestsMenu"
+            :class="[
+              'w-full flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 group cursor-pointer',
+              isCollapsed ? 'justify-center' : 'justify-between',
+              isFeatureRequestsActive && !featureRequestsExpanded
+                ? 'bg-teal text-white'
+                : 'text-gray-700 hover:bg-gray-100'
+            ]"
+          >
+            <div class="flex items-center">
+              <svg
+                :class="[
+                  'w-5 h-5 flex-shrink-0',
+                  isFeatureRequestsActive && !featureRequestsExpanded ? 'text-white' : 'text-gray-500 group-hover:text-teal'
+                ]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="FEATURE_REQUESTS_ICON" />
+              </svg>
+              <span
+                v-if="!isCollapsed"
+                class="ml-3 text-sm font-medium"
+              >
+                Feature Requests
+              </span>
+            </div>
+            <ChevronDown
+              v-if="!isCollapsed"
+              size="sm"
+              :class="[
+                'transition-transform duration-200',
+                featureRequestsExpanded ? 'rotate-180' : '',
+                isFeatureRequestsActive && !featureRequestsExpanded ? 'text-white' : 'text-gray-500 group-hover:text-teal'
+              ]" />
+          </button>
+
+          <!-- Submenu -->
+          <div
+            v-if="!isCollapsed && featureRequestsExpanded"
+            class="mt-1 ml-4 pl-4 border-l border-gray-300 space-y-1"
+          >
+            <router-link
+              v-for="subItem in filteredFeatureRequestsSubMenu"
+              :key="subItem.route"
+              :to="{ name: subItem.route }"
+              :class="[
+                'block px-3 py-2 rounded-lg text-sm transition-all duration-200',
+                isActiveRoute(subItem.route)
+                  ? 'bg-teal-light text-teal font-medium'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-teal'
+              ]"
+            >
+              {{ subItem.name }}
+            </router-link>
+          </div>
+        </div>
 
         <!-- Installation List with Submenu -->
         <div v-if="authStore.hasPermission('installations.view')">

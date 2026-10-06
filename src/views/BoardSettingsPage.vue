@@ -24,39 +24,76 @@ const saving = ref(false);
 const revealedSecret = ref<string | null>(null);
 
 /**
- * `requires` marks a toggle that only does anything while another is on. It
- * stays visible and keeps its stored value, so turning review back on restores
- * the choice rather than silently losing it.
+ * The three address lists behind "new request notifications". Each is stored
+ * and edited as one comma-separated string, matching how the mail providers'
+ * own cc/bcc settings work.
  */
+const RECIPIENT_FIELDS: {
+  key: 'new_request_email' | 'new_request_cc' | 'new_request_bcc';
+  label: string;
+  placeholder: string;
+  hint: string;
+}[] = [
+  {
+    key: 'new_request_email',
+    label: 'To',
+    placeholder: 'team@example.com, product@example.com',
+    hint: 'Leave blank to turn new-request notifications off entirely.',
+  },
+  {
+    key: 'new_request_cc',
+    label: 'Cc',
+    placeholder: 'support@example.com',
+    hint: 'Copied in, and visible to everyone else on the email.',
+  },
+  {
+    key: 'new_request_bcc',
+    label: 'Bcc',
+    placeholder: 'archive@example.com',
+    hint: 'Copied in without the other recipients seeing the address.',
+  },
+];
+
+const countAddresses = (value: string | null | undefined): number =>
+  (value ?? '')
+    .split(/[,;]+/)
+    .map((address) => address.trim())
+    .filter(Boolean).length;
+
+const recipientCount = computed(() => countAddresses(settings.value?.new_request_email));
+
+const recipientSummary = computed(() => {
+  const parts = [`${recipientCount.value} recipient${recipientCount.value === 1 ? '' : 's'}`];
+  const cc = countAddresses(settings.value?.new_request_cc);
+  const bcc = countAddresses(settings.value?.new_request_bcc);
+
+  if (cc) parts.push(`${cc} cc`);
+  if (bcc) parts.push(`${bcc} bcc`);
+
+  return `Sent to ${parts.join(', ')} on every new request.`;
+});
+
 const TOGGLES: {
   key: keyof BoardSettings;
   label: string;
   hint: string;
-  requires?: keyof BoardSettings;
-  blockedHint?: string;
 }[] = [
   { key: 'is_enabled', label: 'Board is live', hint: 'Turn off to take the board down without losing anything.' },
   { key: 'allow_submissions', label: 'Accept new requests', hint: 'Merchants can submit ideas.' },
   { key: 'allow_voting', label: 'Accept votes', hint: 'Merchants can back existing requests.' },
   { key: 'allow_comments', label: 'Allow comments', hint: 'Merchants can discuss a request and you can reply as the team.' },
   {
-    key: 'require_approval',
-    label: 'Review before publishing',
-    hint: 'New requests stay hidden until you approve them. Turn this off to show the Pending column on the public board.',
+    key: 'hide_pending_requests',
+    label: 'Hide pending requests from the public board',
+    hint: 'New requests stay off the board until you publish them from the requests list. Leave off to show every request as soon as it arrives.',
   },
   { key: 'show_vote_counts', label: 'Show vote counts', hint: 'Merchants see how many stores backed each request.' },
-  { key: 'notify_on_status_change', label: 'Email on status change', hint: 'Tell merchants when something they backed moves.' },
   {
-    key: 'notify_on_approval',
-    label: 'Email on approval',
-    hint: 'Tell the store that asked when their request is approved and goes live on the board.',
-    requires: 'require_approval',
-    blockedHint: 'Needs "Review before publishing". Without review a request is public as soon as it is submitted, so there is no approval to announce.',
+    key: 'notify_on_status_change',
+    label: 'Email on status change',
+    hint: 'Lets status emails go out at all. Each move still asks whether to send one.',
   },
 ];
-
-const isToggleAvailable = (toggle: (typeof TOGGLES)[number]): boolean =>
-  !toggle.requires || Boolean(settings.value?.[toggle.requires]);
 
 onMounted(async () => {
   if (!appsStore.apps.length) await appsStore.fetchApps(1, 100);
@@ -291,39 +328,18 @@ $token = $payload . '.' . hash_hmac('sha256', $payload, env('CRM_BOARD_SECRET'))
               v-for="toggle in TOGGLES"
               :key="String(toggle.key)"
               class="flex items-start gap-3"
-              :class="isToggleAvailable(toggle) ? '' : 'opacity-60'"
             >
               <input
                 type="checkbox"
-                class="mt-1 h-4 w-4 accent-primary"
+                class="mt-1.5 h-4 w-4 accent-primary"
                 :checked="Boolean(settings[toggle.key])"
-                :disabled="!isToggleAvailable(toggle)"
                 @change="(settings[toggle.key] as boolean) = ($event.target as HTMLInputElement).checked"
               />
               <span>
                 <span class="block text-b4 font-semibold text-dark">{{ toggle.label }}</span>
-                <span class="block text-b6 text-light">
-                  {{ isToggleAvailable(toggle) ? toggle.hint : toggle.blockedHint }}
-                </span>
+                <span class="block text-b6 text-light">{{ toggle.hint }}</span>
               </span>
             </label>
-
-            <div class="pt-2">
-              <label for="new-request-email" class="mb-1.5 block text-b4 font-semibold text-dark">
-                Email me about new requests
-              </label>
-              <input
-                id="new-request-email"
-                v-model="settings.new_request_email"
-                type="email"
-                maxlength="255"
-                placeholder="team@example.com"
-                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
-              />
-              <p class="mt-1 text-b6 text-light">
-                Sent whenever a merchant submits a request. Leave blank to turn it off.
-              </p>
-            </div>
 
             <div class="flex items-center gap-3 pt-2">
               <label for="limit" class="text-b4 text-mid">Requests per store per day</label>
@@ -350,6 +366,47 @@ $token = $payload . '.' . hash_hmac('sha256', $payload, env('CRM_BOARD_SECRET'))
 
       <!-- credentials + embed -->
       <div class="space-y-5">
+        <section class="rounded-lg border border-lighter bg-white p-5">
+          <div class="mb-4">
+            <h2 class="text-h4 font-semibold text-dark">New request notifications</h2>
+            <p class="mt-0.5 text-b5 text-mid">
+              Who on your team hears about it when a merchant submits a request. Separate
+              several addresses with commas.
+            </p>
+          </div>
+
+          <div class="space-y-4">
+            <div v-for="field in RECIPIENT_FIELDS" :key="String(field.key)">
+              <label :for="`new-request-${field.key}`" class="mb-1.5 block text-b6 font-semibold tracking-wide text-light uppercase">
+                {{ field.label }}
+              </label>
+              <input
+                :id="`new-request-${field.key}`"
+                :value="settings[field.key] ?? ''"
+                type="text"
+                :placeholder="field.placeholder"
+                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
+                @input="(settings[field.key] as string | null) = ($event.target as HTMLInputElement).value"
+              />
+              <p class="mt-1 text-b6 text-light">{{ field.hint }}</p>
+            </div>
+
+            <p
+              v-if="!recipientCount && (settings.new_request_cc || settings.new_request_bcc)"
+              class="rounded-sm bg-warning-lighter px-3 py-2 text-b5 text-mid"
+            >
+              Nothing will be sent while <strong>To</strong> is empty - a cc or bcc on its own
+              is not enough.
+            </p>
+            <p v-else-if="!recipientCount" class="text-b5 text-light">
+              Notifications are off. Add an address to <strong>To</strong> to turn them on.
+            </p>
+            <p v-else class="text-b5 text-mid">
+              {{ recipientSummary }}
+            </p>
+          </div>
+        </section>
+
         <section class="rounded-lg border border-lighter bg-white p-5">
           <h2 class="mb-3 text-h4 font-semibold text-dark">Credentials</h2>
 

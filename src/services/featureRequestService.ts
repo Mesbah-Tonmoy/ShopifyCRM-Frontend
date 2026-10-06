@@ -115,12 +115,18 @@ export interface BoardSettings {
     allow_submissions: boolean;
     allow_voting: boolean;
     allow_comments: boolean;
-    require_approval: boolean;
+    /** On: new requests stay off the public board until an admin publishes them. */
+    hide_pending_requests: boolean;
     show_vote_counts: boolean;
     notify_on_status_change: boolean;
-    /** Blank turns the new-request heads-up off; there is no separate flag. */
+    /**
+     * Comma-separated address lists for the new-request heads-up. Blanking the
+     * To list turns it off; there is no separate flag, and a cc or bcc on its
+     * own sends nothing.
+     */
     new_request_email: string | null;
-    notify_on_approval: boolean;
+    new_request_cc: string | null;
+    new_request_bcc: string | null;
     submission_limit_per_day: number;
     visible_statuses: FeatureRequestStatus[] | null;
     theme: Record<string, unknown> | null;
