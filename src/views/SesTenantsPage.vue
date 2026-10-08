@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Swal from 'sweetalert2';
 import {
   sesTenantService,
@@ -7,6 +7,12 @@ import {
   type SesTenantList,
   type SesTenantRegion,
   type SesTenantShop,
+  type SesTenantSort,
+  type SesTenantStatusFilter,
+  type SesTenantType,
+  type StoreMailTotals,
+  type TenantMonitorOverview,
+  type TenantMonitorSettings,
 } from '@/services/sesTenantService';
 import { smtpProviderService } from '@/services/smtpProviderService';
 import { useAppsStore } from '@/stores/apps';
@@ -19,12 +25,14 @@ import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 
 /**
- * One SES tenant per Shopify store, per region.
+ * SES tenants by plan, per region: a dedicated tenant for each premium store,
+ * one shared free-pool tenant for every free-plan store.
  *
  * Tenants isolate sending reputation, so a single store with a bad list cannot
- * pause the whole SES account. This page is where an operator creates them for
- * existing stores, stops a store that is behaving badly, and moves the whole
- * estate from one AWS region to another.
+ * pause the whole SES account. AWS bills per tenant, so only paying stores get
+ * their own; the app moves stores between the two as their plan changes. This
+ * page is where an operator checks that, stops a store that is behaving badly,
+ * sets up the daily check, and moves the whole estate to another AWS region.
  *
  * Two facts shape the layout:
  *
@@ -59,13 +67,45 @@ const syncing = ref(false);
  * both would carry the same label.
  */
 const regionFilter = ref<string | null>(null);
+/** Server-side, like the type filter and sort, so paging stays correct. */
+const statusFilter = ref<'all' | SesTenantStatusFilter>('all');
+const sortBy = ref<SesTenantSort>('shop');
+
+/** Paging is by store; a store's rows in every region come together. */
+const page = ref(1);
+const pageSize = ref(50);
+const PAGE_SIZES = [25, 50, 100, 200];
+const pageCount = computed(() => Math.max(1, Math.ceil((data.value?.total ?? 0) / pageSize.value)));
+const pageStart = computed(() => (data.value?.total ? (page.value - 1) * pageSize.value + 1 : 0));
+const pageEnd = computed(() => Math.min(page.value * pageSize.value, data.value?.total ?? 0));
 
 /**
- * Set while the default above is being materialised, so resolving "active"
- * into a concrete key does not fire a second identical fetch.
+ * Region details are collapsed by default: the table is what an operator
+ * works in, and the one-line summary still flags a region needing attention.
+ * Remembered per browser.
  */
-const applyingDefaultRegion = ref(false);
-const statusFilter = ref<string>('all');
+const REGION_DETAILS_KEY = 'sesTenants.showRegionDetails';
+const readFlag = (key: string) => {
+  try {
+    return window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+};
+const showRegionDetails = ref(readFlag(REGION_DETAILS_KEY));
+watch(showRegionDetails, (open) => {
+  try {
+    window.localStorage.setItem(REGION_DETAILS_KEY, open ? '1' : '0');
+  } catch {
+    /* private mode: the toggle still works for this visit */
+  }
+});
+
+/** Daily check panel: settings and run history on separate tabs. */
+const monitorTab = ref<'settings' | 'runs'>('settings');
+
+/** Server-side: which kind of rows to list. Free stores can be thousands. */
+const typeFilter = ref<'all' | 'dedicated' | 'free' | 'system'>('all');
 
 /** Backfill progress, non-null while it runs. */
 const backfill = ref<{
@@ -123,6 +163,14 @@ const effectiveProviderKey = computed(
 interface TenantRow {
   shop: string;
   isPlatform: boolean;
+  isPool: boolean;
+  /** This row's own type, which can differ from the store's tier in another region. */
+  tenantType: SesTenantType;
+  /** The store's last 7 days through SES (or since its last resume). */
+  reputation: StoreMailTotals | null;
+  reputationSince: string | null;
+  /** Against the Daily check limits; null when too little mail to judge. */
+  risk: 'ok' | 'warn' | 'pause' | null;
   localStatus: string;
   pausedReason: string | null;
   pausedBy: string | null;
@@ -148,6 +196,11 @@ const allRows = computed<TenantRow[]>(() => {
       rows.push({
         shop: shop.shop,
         isPlatform: shop.shop === '__platform__',
+        isPool: shop.shop === '__free__',
+        tenantType: region.tenantType,
+        reputation: shop.reputation ?? null,
+        reputationSince: shop.reputationSince ?? null,
+        risk: shop.risk ?? null,
         localStatus: shop.localStatus,
         pausedReason: shop.pausedReason,
         pausedBy: shop.pausedBy,
@@ -161,26 +214,56 @@ const allRows = computed<TenantRow[]>(() => {
   return rows;
 });
 
-/** True when SES would reject a send for this tenant right now. */
-const isBroken = (row: TenantRow) =>
-  row.region.sendingStatus === 'ERROR' ||
-  row.region.sendingStatus === 'MISSING' ||
-  row.region.sendingStatus === 'PENDING' ||
-  !row.region.resourcesLinked;
+const typeLabel = (type: SesTenantType) =>
+  ({ dedicated: 'Dedicated', free: 'Free (shared)', pool: 'Free pool', platform: 'Platform' })[type] ||
+  type;
 
-const rows = computed(() => {
-  const list = allRows.value;
+const typeClass = (type: SesTenantType) =>
+  ({
+    dedicated: 'bg-indigo-100 text-indigo-800',
+    free: 'bg-gray-100 text-gray-700',
+    pool: 'bg-teal-100 text-teal-800',
+    platform: 'bg-gray-200 text-gray-700',
+  })[type] || 'bg-gray-100 text-gray-600';
 
-  if (statusFilter.value === 'paused') return list.filter((r) => r.localStatus === 'paused');
-  if (statusFilter.value === 'broken') return list.filter(isBroken);
-  if (statusFilter.value === 'healthy')
-    return list.filter((r) => r.localStatus !== 'paused' && !isBroken(r));
+/** Human name for the shared sentinels in lists and dialogs. */
+const shopLabel = (shop: string) =>
+  shop === '__free__' ? 'Free pool tenant' : shop === '__platform__' ? 'Platform tenant' : shop;
 
-  return list;
-});
+/**
+ * A store's rates for display, and how the app judged them against the
+ * configured limits: 'pause', 'warn', 'ok', or null when it sent too little.
+ */
+const rates = (row: TenantRow) => {
+  const totals = row.reputation;
+  if (!totals || !totals.sent) return null;
+  const fmt = (v: number) => (v < 1 ? v.toFixed(2) : v.toFixed(1));
+  return {
+    bounce: fmt((totals.bounced / totals.sent) * 100),
+    complaint: fmt((totals.complained / totals.sent) * 100),
+    sent: totals.sent,
+    bounced: totals.bounced,
+    complained: totals.complained,
+    level: row.risk,
+  };
+};
 
-const pausedCount = computed(() => allRows.value.filter((r) => r.localStatus === 'paused').length);
-const brokenCount = computed(() => allRows.value.filter(isBroken).length);
+/** One-line health of a region, for the collapsed summary. */
+const regionNeedsAttention = (region: { poolStatus: string | null; platformStatus: string | null; healthyCount: number; tenantCount: number }) =>
+  !['ENABLED', 'REINSTATED'].includes(region.poolStatus || '') ||
+  !['ENABLED', 'REINSTATED'].includes(region.platformStatus || '') ||
+  region.healthyCount < region.tenantCount;
+
+/** The shared pool and platform rows: not stores, so no plan to check. */
+const isSystemRow = (row: TenantRow) => row.isPlatform || row.isPool;
+
+// Filtering happens in the app now (so it covers every page, not just this
+// one); the table shows the page it was sent.
+const rows = allRows;
+
+const counts = computed(
+  () => data.value?.counts ?? { all: 0, paused: 0, broken: 0, healthy: 0, risky: 0 }
+);
 
 onMounted(async () => {
   if (!appsStore.apps.length) await appsStore.fetchApps(1, 100);
@@ -194,56 +277,100 @@ watch(selectedAppId, () => {
   loadError.value = null;
   regionFilter.value = null;
   migration.value = null;
-  if (selectedAppId.value !== null) fetchTenants();
+  monitor.value = null;
+  monitorForm.value = null;
+  // Unsaved edits belonged to the previous app; keeping the flag would stop
+  // this app's settings from ever filling the form.
+  monitorDirty.value = false;
+  window.clearTimeout(monitorPoll);
+  if (selectedAppId.value !== null) {
+    refetchFromFirstPage();
+    loadMonitor();
+  }
 });
 
+/** Any filter change starts again from page 1; changing page refetches. */
+const refetchFromFirstPage = () => {
+  if (page.value !== 1) page.value = 1; // the page watcher fetches
+  else fetchTenants();
+};
+
+watch([typeFilter, statusFilter, sortBy, pageSize], refetchFromFirstPage);
+watch(page, () => fetchTenants());
+
 watch(regionFilter, () => {
-  if (applyingDefaultRegion.value) {
-    applyingDefaultRegion.value = false;
-    return;
-  }
-  fetchTenants();
+  // Cleared when the app changes; that watcher does its own fetch.
+  if (regionFilter.value === null) return;
+  refetchFromFirstPage();
 });
 
 let searchTimer: number | undefined;
 watch(search, () => {
   window.clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(() => fetchTenants(), 350);
+  searchTimer = window.setTimeout(refetchFromFirstPage, 350);
 });
+
+/**
+ * Each load gets a number; a response that is not from the latest load (the
+ * operator switched app, page or filter while it was in flight) is dropped,
+ * so a slow answer cannot overwrite a newer one — or another app's data.
+ */
+let tenantsRequest = 0;
 
 const fetchTenants = async () => {
   if (selectedAppId.value === null) return;
+  const requestId = ++tenantsRequest;
+  const appId = selectedAppId.value;
 
   try {
     loading.value = true;
     loadError.value = null;
 
-    const response = await sesTenantService.getAll(selectedAppId.value, {
+    const response = await sesTenantService.getAll(appId, {
       search: search.value.trim() || undefined,
-      limit: 500,
+      limit: pageSize.value,
+      skip: (page.value - 1) * pageSize.value,
+      // The table shows one region; stores without a row there are left out
+      // here, so the page count is right.
+      region: regionFilter.value ?? undefined,
+      status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+      sort: sortBy.value,
       // Only the "stores without tenants" count is scoped by this — the tenant
       // rows always come back for every region, which is what lets the table
       // show a store's other-region tenants and the move dialog offer them.
       // Omitted means the active region, matching what provisioning would do.
       providerKey: regionFilter.value ?? undefined,
+      type: typeFilter.value === 'all' ? undefined : typeFilter.value,
     });
+
+    if (requestId !== tenantsRequest || appId !== selectedAppId.value) return;
 
     if (response.success && response.data) {
       data.value = response.data;
 
+      // The set shrank under the current page (a resume or delete emptied the
+      // last page of a filter): go to the last page that exists.
+      const lastPage = Math.max(1, Math.ceil(response.data.total / pageSize.value));
+      if (page.value > lastPage) {
+        page.value = lastPage; // the page watcher refetches
+        return;
+      }
+
       // The first load is the earliest point the active region is known, so
       // that is where the picker's default stops being implicit.
+      // Setting it refetches (via the watcher) so the first page is already
+      // scoped to that region.
       if (regionFilter.value === null && response.data.activeProviderKey) {
-        applyingDefaultRegion.value = true;
         regionFilter.value = response.data.activeProviderKey;
       }
     } else {
       loadError.value = response.message || 'Failed to load tenants';
     }
   } catch (err: any) {
+    if (requestId !== tenantsRequest) return;
     loadError.value = err.message || 'Failed to load tenants';
   } finally {
-    loading.value = false;
+    if (requestId === tenantsRequest) loading.value = false;
   }
 };
 
@@ -272,10 +399,13 @@ const runBackfill = async (providerKey?: string) => {
 
   const confirmed = await Swal.fire({
     icon: 'question',
-    title: `Create tenants in ${label}?`,
-    html: `This creates one SES tenant per store in <b>${label}</b> only.<br><br>
-           About <b>${data.value.missingCount}</b> store(s) still need one there.<br><br>
-           <span style="color:#b45309">Note: AWS charges per tenant per month, per region.</span>`,
+    titleText: `Fill ${label}?`,
+    html: `For every installed store, in <b>${label}</b> only:<br><br>
+           <b>Premium stores</b> get (or keep) a dedicated SES tenant.<br>
+           <b>Free stores</b> are added to the shared free pool — no AWS call, no charge.<br>
+           The free-pool and platform tenants are created if missing.<br><br>
+           <b>${data.value.missingCount}</b> tenant(s) currently need attention there.<br><br>
+           <span style="color:#b45309">AWS charges per tenant per month, per region — dedicated tenants only.</span>`,
     showCancelButton: true,
     confirmButtonText: 'Start',
     confirmButtonColor: '#0d9488',
@@ -362,21 +492,37 @@ const provisionOne = async (shop: string, rotate = false, providerKey?: string) 
 };
 
 /**
- * Replaces a store's tenant with a freshly named one, in one region.
+ * Replaces a tenant with a freshly named one, in one region.
  *
- * For when the existing tenant should be abandoned rather than repaired — its
- * reputation history is unwanted, say. The old tenant is deleted as part of the
- * operation, so nothing is left behind billing.
+ * Make before break: the app creates and links the new tenant while the old
+ * one keeps sending, switches over only once the new one is sendable, then
+ * deletes the old one (retried daily if AWS refuses). So replacing the free
+ * pool does not interrupt free stores' mail.
  */
 const rotateTenant = async (row: TenantRow) => {
+  const poolDisabled = row.isPool && row.region.sendingStatus === 'DISABLED';
+
   const confirmed = await Swal.fire({
     icon: 'warning',
-    title: `Replace the tenant for ${row.shop}?`,
-    html: `The tenant in <b>${row.region.region}</b> is <b>deleted</b> and a new one is created under a
-           new name.<br><br>Its sending history and reputation in SES start over. Use
-           "Re-provision" instead if you only want to repair a broken tenant.`,
+    titleText: `Replace the ${row.isPool ? 'free pool tenant' : `tenant for ${shopLabel(row.shop)}`}?`,
+    html: `A new tenant is created in <b>${row.region.region}</b> under a new name and takes over as soon
+           as it can send; then the current one is <b>deleted</b>. Mail keeps flowing throughout.
+           <br><br>Its sending history and reputation in SES start over. Use "Re-provision" instead if
+           you only want to repair a broken tenant.
+           ${
+             row.isPool
+               ? `<br><br><span style="color:#b45309"><b>Every free-plan store moves to the new tenant.</b>
+                  ${
+                    poolDisabled
+                      ? `AWS disabled the current one for its reputation. Pause the stores that caused it
+                         first — otherwise the same mail disables the new tenant too, and the account-level
+                         rates AWS also watches keep rising.`
+                      : ''
+                  }</span>`
+               : ''
+           }`,
     showCancelButton: true,
-    confirmButtonText: 'Delete and recreate',
+    confirmButtonText: 'Replace',
     confirmButtonColor: '#dc2626',
   });
 
@@ -397,13 +543,13 @@ const addToRegion = async (row: TenantRow) => {
   const options = regions.value.filter((r) => !have.has(r.providerKey));
 
   if (!options.length) {
-    Toast.fire({ icon: 'info', title: `${row.shop} already has a tenant in every region` });
+    Toast.fire({ icon: 'info', titleText: `${row.shop} already has a tenant in every region` });
     return;
   }
 
   const { value: providerKey } = await Swal.fire({
     icon: 'question',
-    title: `Add a tenant for ${row.shop}`,
+    titleText: `Add a tenant for ${row.shop}`,
     input: 'select',
     inputOptions: Object.fromEntries(
       options.map((r) => [r.providerKey, `${r.region}${r.isActive ? ' (active)' : ''}`])
@@ -433,19 +579,28 @@ const removeTenant = async (row: TenantRow) => {
   if (selectedAppId.value === null) return;
 
   const isActiveRegion = row.region.providerKey === data.value?.activeProviderKey;
+  const name = shopLabel(row.shop);
+
+  const consequence =
+    row.tenantType === 'free'
+      ? `<br><br>This store has no tenant of its own — only its free-pool record is removed, and it
+         keeps sending under the pool. Any pause on it is lost.`
+      : row.isPool
+        ? `<br><br><span style="color:#dc2626"><b>Every free-plan store in ${row.region.region} sends
+           under this tenant.</b> They all stop sending from this region until it exists again
+           (the daily check recreates it).</span>`
+        : row.isPlatform
+          ? `<br><br><span style="color:#dc2626">Our own alerts and notices send under this tenant.</span>`
+          : isActiveRegion
+            ? `<br><br>This is the active sending region: the store falls back to the free pool until
+               the next plan check gives it a new tenant.`
+            : '';
 
   const confirmed = await Swal.fire({
     icon: 'warning',
-    title: `Delete the tenant for ${row.shop}?`,
+    titleText: `Delete the tenant for ${name}?`,
     html: `Permanently deletes its tenant in <b>${row.region.region}</b> and stops that
-           per-tenant AWS charge.
-           ${
-             isActiveRegion
-               ? `<br><br><span style="color:#dc2626"><b>This is the active sending region.</b>
-                  With a TENANT suppression scope, SES rejects mail that names no tenant — so this
-                  store stops sending until it has one again.</span>`
-               : ''
-           }`,
+           per-tenant AWS charge.${consequence}`,
     input: 'checkbox',
     inputPlaceholder: 'Force: drop our record even if AWS refuses',
     showCancelButton: true,
@@ -481,8 +636,12 @@ const pause = async (row: TenantRow) => {
 
   const asked = await Swal.fire({
     icon: 'warning',
-    title: `Pause email for ${row.shop}?`,
-    text: 'All email for this store stops immediately, in every region it has a tenant in. Give a reason — it is recorded and shown here.',
+    titleText: `Pause email for ${shopLabel(row.shop)}?`,
+    text: row.isPool
+      ? 'Every free-plan store stops sending immediately, in every region. Give a reason — it is recorded and shown here.'
+      : row.tenantType === 'free'
+        ? 'This store stops sending immediately. It shares the free pool, so the pause is ours alone — AWS and the other free stores are unaffected. Give a reason — it is recorded and shown here.'
+        : 'All email for this store stops immediately, in every region it has a tenant in. Give a reason — it is recorded and shown here.',
     input: 'textarea',
     inputPlaceholder: 'e.g. high complaint rate, suspected list purchase',
     inputValidator: (value) => (value && value.trim() ? null : 'A reason is required'),
@@ -515,7 +674,7 @@ const resume = async (row: TenantRow) => {
 
   const confirmed = await Swal.fire({
     icon: 'question',
-    title: `Resume email for ${row.shop}?`,
+    titleText: `Resume email for ${row.shop}?`,
     text: row.pausedReason ? `It was paused because: ${row.pausedReason}` : undefined,
     showCancelButton: true,
     confirmButtonText: 'Resume sending',
@@ -616,7 +775,7 @@ const cutOver = async () => {
 
   const confirmed = await Swal.fire({
     icon: 'warning',
-    title: `Send all mail from ${target.region}?`,
+    titleText: `Send all mail from ${target.region}?`,
     html: `<p style="text-align:left">Every store starts sending through
              <b>${target.region}</b> immediately.</p>
            <p style="text-align:left;margin-top:12px"><b>Before you confirm:</b></p>
@@ -678,7 +837,7 @@ const tearDownRegion = async (providerKey: string) => {
 
   const confirmed = await Swal.fire({
     icon: 'warning',
-    title: `Delete every tenant in ${label}?`,
+    titleText: `Delete every tenant in ${label}?`,
     html: `Permanently deletes <b>${region?.tenantCount ?? 0}</b> tenant(s) and stops their AWS
            charges.
            ${
@@ -745,6 +904,178 @@ const tearDownRegion = async (providerKey: string) => {
   }
 };
 
+// --- Plan check --------------------------------------------------------------
+
+/**
+ * Asks the app to look up the store's plan in Shopify now and move its tenant
+ * to match, instead of waiting for the daily check.
+ */
+const recheckPlan = async (row: TenantRow) => {
+  if (selectedAppId.value === null) return;
+
+  try {
+    busyShop.value = row.shop;
+    const response = await sesTenantService.reconcile(selectedAppId.value, row.shop);
+    Swal.fire({
+      icon: response.success ? 'success' : 'error',
+      title: response.success ? 'Plan checked' : 'Plan check incomplete',
+      text: response.message,
+    });
+    await fetchTenants();
+  } catch (err: any) {
+    Swal.fire({ icon: 'error', title: 'Plan check failed', text: err.message || 'Request failed' });
+  } finally {
+    busyShop.value = null;
+  }
+};
+
+// --- Daily check -------------------------------------------------------------
+
+const showMonitor = ref(false);
+const monitor = ref<TenantMonitorOverview | null>(null);
+const monitorError = ref<string | null>(null);
+const monitorSaving = ref(false);
+const monitorStarting = ref(false);
+/** Editable copy of the settings; recipients as text, one per line. */
+const monitorForm = ref<(Omit<TenantMonitorSettings, 'recipients'> & { recipients: string }) | null>(
+  null
+);
+/** Set once the operator edits the form, so a background refresh keeps their edits. */
+const monitorDirty = ref(false);
+let monitorPoll: number | undefined;
+
+const timeZones = computed<string[]>(() => {
+  const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
+  const all: string[] = intl.supportedValuesOf?.('timeZone') ?? [
+    'UTC',
+    'Asia/Dhaka',
+    'Asia/Kolkata',
+    'Europe/London',
+    'America/New_York',
+  ];
+  const current = monitorForm.value?.timezone;
+  return current && !all.includes(current) ? [current, ...all] : all;
+});
+
+const lastRun = computed(() => monitor.value?.runs[0] ?? null);
+
+let monitorRequest = 0;
+let unmounted = false;
+
+const loadMonitor = async () => {
+  if (selectedAppId.value === null) return;
+  const requestId = ++monitorRequest;
+  const appId = selectedAppId.value;
+
+  try {
+    monitorError.value = null;
+    const response = await sesTenantService.monitor(appId);
+    // Another app's settings must never land in this app's form: saving would
+    // write them here.
+    if (requestId !== monitorRequest || appId !== selectedAppId.value) return;
+    if (response.success && response.data) {
+      monitor.value = response.data;
+      if (!monitorDirty.value) {
+        const settings = response.data.settings;
+        monitorForm.value = { ...settings, recipients: settings.recipients.join('\n') };
+      }
+      schedulePoll();
+    } else {
+      monitorError.value = response.message || 'Could not load the daily check';
+      schedulePoll(); // a failed refresh mid-run keeps trying, not freezes
+    }
+  } catch (err: any) {
+    if (requestId !== monitorRequest) return;
+    monitorError.value = err.message || 'Could not load the daily check';
+    schedulePoll();
+  }
+};
+
+/** While a run is going, refresh every 10s so its result shows when it lands. */
+const schedulePoll = () => {
+  window.clearTimeout(monitorPoll);
+  if (!unmounted && monitor.value?.running) {
+    monitorPoll = window.setTimeout(async () => {
+      await loadMonitor();
+      if (!monitor.value?.running) await fetchTenants();
+    }, 10000);
+  }
+};
+
+const saveMonitor = async () => {
+  if (selectedAppId.value === null || !monitorForm.value) return;
+
+  const recipients = monitorForm.value.recipients
+    .split(/[\n,]/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  try {
+    monitorSaving.value = true;
+    const reputation = Object.fromEntries(
+      Object.entries(monitorForm.value.reputation).filter(
+        ([key, value]) => key === 'enabled' || (typeof value === 'number' && Number.isFinite(value))
+      )
+    );
+    const response = await sesTenantService.saveMonitor(selectedAppId.value, {
+      ...monitorForm.value,
+      reputation: reputation as unknown as TenantMonitorSettings['reputation'],
+      recipients,
+    });
+
+    if (response.success) {
+      Toast.fire({ icon: 'success', title: response.message || 'Saved' });
+      monitorDirty.value = false;
+      await loadMonitor();
+    } else {
+      Swal.fire({ icon: 'error', title: 'Not saved', text: response.message });
+    }
+  } catch (err: any) {
+    Swal.fire({ icon: 'error', title: 'Not saved', text: err.message || 'Request failed' });
+  } finally {
+    monitorSaving.value = false;
+  }
+};
+
+const runCheckNow = async () => {
+  if (selectedAppId.value === null) return;
+
+  const confirmed = await Swal.fire({
+    icon: 'question',
+    title: 'Run the daily check now?',
+    html: `Checks every store's plan against Shopify, moves tenants to match, retries old
+           tenant deletions, and syncs every tenant from AWS. It can take a few minutes with
+           many stores. An email goes out if anything changed.`,
+    showCancelButton: true,
+    confirmButtonText: 'Run now',
+    confirmButtonColor: '#0d9488',
+  });
+  if (!confirmed.isConfirmed) return;
+
+  try {
+    monitorStarting.value = true;
+    const response = await sesTenantService.runCheck(selectedAppId.value);
+    Toast.fire({ icon: response.success ? 'success' : 'error', title: response.message || 'Started' });
+    await loadMonitor();
+  } catch (err: any) {
+    Swal.fire({ icon: 'error', title: 'Could not start', text: err.message || 'Request failed' });
+  } finally {
+    monitorStarting.value = false;
+  }
+};
+
+onBeforeUnmount(() => {
+  unmounted = true;
+  window.clearTimeout(monitorPoll);
+});
+
+const runStatusClass = (status: string) =>
+  status === 'ok'
+    ? 'bg-green-100 text-green-800'
+    : status === 'failed'
+      ? 'bg-red-100 text-red-800'
+      : 'bg-amber-100 text-amber-800';
+
 // --- Presentation ----------------------------------------------------------
 
 const statusClass = (status: string) => {
@@ -755,6 +1086,7 @@ const statusClass = (status: string) => {
   // Gone from AWS, so amber rather than red: the store still exists, and
   // Re-provision fixes it.
   if (status === 'MISSING') return 'bg-amber-100 text-amber-800';
+  if (status === 'PAUSED') return 'bg-red-100 text-red-800';
   return 'bg-gray-100 text-gray-600';
 };
 
@@ -776,9 +1108,29 @@ const relative = (value: string | null) => {
   <div>
     <PageHeader
       title="SES Tenants"
-      description="One SES tenant per store, so a single store's reputation cannot pause the whole account"
+      description="A dedicated SES tenant per premium store and one shared pool for free stores, so no single store's reputation can pause the whole account"
     >
       <template #actions>
+        <button
+          v-if="selectedAppId !== null"
+          @click="showMonitor = !showMonitor"
+          class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+        >
+          <span
+            v-if="monitor"
+            class="w-2 h-2 rounded-full"
+            :class="
+              monitor.running
+                ? 'bg-amber-500'
+                : !monitor.settings.enabled
+                  ? 'bg-gray-400'
+                  : lastRun?.status === 'failed'
+                    ? 'bg-red-500'
+                    : 'bg-green-500'
+            "
+          />
+          {{ showMonitor ? 'Hide daily check' : 'Daily check' }}
+        </button>
         <button
           v-if="selectedAppId !== null && regions.length > 1"
           @click="openMigration"
@@ -801,7 +1153,7 @@ const relative = (value: string | null) => {
           :disabled="!!backfill || !!teardown || loading"
           class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all disabled:opacity-50"
         >
-          Create missing tenants
+          Fill active region
         </button>
       </template>
     </PageHeader>
@@ -818,11 +1170,26 @@ const relative = (value: string | null) => {
         </option>
       </SelectInput>
 
-      <SelectInput v-if="data" v-model="statusFilter" label="Status" select-class="w-44">
-        <option value="all">All ({{ allRows.length }})</option>
-        <option value="healthy">Sendable</option>
-        <option value="broken">Needs attention ({{ brokenCount }})</option>
-        <option value="paused">Paused ({{ pausedCount }})</option>
+      <SelectInput v-if="data" v-model="typeFilter" label="Type" select-class="w-44">
+        <option value="all">All types</option>
+        <option value="dedicated">Premium (dedicated)</option>
+        <option value="free">Free (shared pool)</option>
+        <option value="system">Pool &amp; platform</option>
+      </SelectInput>
+
+      <SelectInput v-if="data" v-model="statusFilter" label="Status" select-class="w-48">
+        <option value="all">All ({{ counts.all }})</option>
+        <option value="healthy">Sendable ({{ counts.healthy }})</option>
+        <option value="broken">Needs attention ({{ counts.broken }})</option>
+        <option value="paused">Paused ({{ counts.paused }})</option>
+        <option value="risky">At risk — bounce/complaints ({{ counts.risky }})</option>
+      </SelectInput>
+
+      <SelectInput v-if="data" v-model="sortBy" label="Sort" select-class="w-48">
+        <option value="shop">Store name</option>
+        <option value="bounce">Bounce rate (highest first)</option>
+        <option value="complaint">Complaint rate (highest first)</option>
+        <option value="sent">Mail volume (highest first)</option>
       </SelectInput>
 
       <SearchInput
@@ -883,8 +1250,259 @@ const relative = (value: string | null) => {
     </div>
 
     <template v-else>
+      <!-- Daily check: schedule, recipients, recent runs -->
+      <div v-if="showMonitor" class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h3 class="text-base font-semibold text-dark">Daily tenant check</h3>
+            <p class="text-sm text-gray-600 mt-1 max-w-2xl">
+              Once a day the app checks every store's plan in Shopify and moves its tenant to match
+              (premium → dedicated, free → shared pool), retries old tenant deletions, and syncs every
+              tenant's status from AWS. If anything changed or failed, the recipients get one email.
+              Every hour it also checks each store's bounce and complaint rate.
+            </p>
+          </div>
+          <button
+            v-if="canEdit"
+            @click="runCheckNow"
+            :disabled="monitorStarting || !!monitor?.running"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium border border-teal text-teal hover:bg-teal-50 disabled:opacity-40 flex items-center gap-2"
+          >
+            <LoadingIcon v-if="monitorStarting || monitor?.running" size="xs" />
+            {{ monitor?.running ? 'Running…' : 'Run now' }}
+          </button>
+        </div>
+
+        <p v-if="monitorError" class="text-sm text-red-600 mt-3">{{ monitorError }}</p>
+
+        <div class="flex gap-1 mt-4 border-b border-gray-200">
+          <button
+            v-for="tab in ([['settings', 'Settings'], ['runs', `Recent runs${monitor ? ` (${monitor.runs.length})` : ''}`]] as const)"
+            :key="tab[0]"
+            type="button"
+            @click="monitorTab = tab[0]"
+            class="px-3 py-2 text-sm font-medium -mb-px border-b-2"
+            :class="
+              monitorTab === tab[0]
+                ? 'border-teal text-teal'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            "
+          >
+            {{ tab[1] }}
+          </button>
+        </div>
+
+        <form
+          v-if="monitorForm && monitorTab === 'settings'"
+          class="grid gap-4 mt-4 md:grid-cols-2"
+          @submit.prevent="saveMonitor"
+          @input="monitorDirty = true"
+          @change="monitorDirty = true"
+        >
+          <div class="flex flex-col gap-3">
+            <label class="flex items-center gap-2 text-sm text-gray-800">
+              <input v-model="monitorForm.enabled" type="checkbox" :disabled="!canEdit" />
+              Run the check every day
+            </label>
+
+            <div class="flex flex-wrap items-end gap-3">
+              <label class="flex flex-col text-xs text-gray-600 gap-1">
+                Time
+                <input
+                  v-model="monitorForm.runAt"
+                  type="time"
+                  required
+                  :disabled="!canEdit || !monitorForm.enabled"
+                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-dark disabled:bg-gray-50"
+                />
+              </label>
+              <label class="flex flex-col text-xs text-gray-600 gap-1">
+                Time zone
+                <select
+                  v-model="monitorForm.timezone"
+                  :disabled="!canEdit || !monitorForm.enabled"
+                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-dark w-56 disabled:bg-gray-50"
+                >
+                  <option v-for="zone in timeZones" :key="zone" :value="zone">{{ zone }}</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-gray-800">
+              <input v-model="monitorForm.realtimeAlerts" type="checkbox" :disabled="!canEdit" />
+              Also email the moment AWS pauses or resumes a tenant
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-800">
+              <input v-model="monitorForm.emailWhenUnchanged" type="checkbox" :disabled="!canEdit" />
+              Send the daily email even when nothing changed
+            </label>
+
+            <fieldset class="border border-gray-200 rounded-lg p-3 mt-1">
+              <legend class="text-xs font-semibold text-gray-600 px-1">Store reputation (hourly)</legend>
+              <label class="flex items-center gap-2 text-sm text-gray-800">
+                <input v-model="monitorForm.reputation.enabled" type="checkbox" :disabled="!canEdit" />
+                Watch each store's bounce and complaint rate (last 7 days)
+              </label>
+              <p class="text-xs text-gray-500 mt-1">
+                Over a pause limit, a <b>free</b> store is paused so the shared pool stays healthy; a
+                premium store only triggers an email. A pause also needs at least 3 hard bounces or 2
+                complaints. Over a warning limit: email, once a day per store.
+                AWS reviews at 5% bounce / 0.1% complaints.
+              </p>
+              <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-600">
+                <label class="flex flex-col gap-1">
+                  Warn: bounce %
+                  <input v-model.number="monitorForm.reputation.warnBouncePct" type="number" step="0.1" min="0.1" max="50" :disabled="!canEdit || !monitorForm.reputation.enabled" class="border border-gray-300 rounded-lg px-2 py-1 text-sm text-dark disabled:bg-gray-50" />
+                </label>
+                <label class="flex flex-col gap-1">
+                  Pause: bounce %
+                  <input v-model.number="monitorForm.reputation.pauseBouncePct" type="number" step="0.1" min="0.1" max="50" :disabled="!canEdit || !monitorForm.reputation.enabled" class="border border-gray-300 rounded-lg px-2 py-1 text-sm text-dark disabled:bg-gray-50" />
+                </label>
+                <label class="flex flex-col gap-1">
+                  Warn: complaint %
+                  <input v-model.number="monitorForm.reputation.warnComplaintPct" type="number" step="0.01" min="0.01" max="5" :disabled="!canEdit || !monitorForm.reputation.enabled" class="border border-gray-300 rounded-lg px-2 py-1 text-sm text-dark disabled:bg-gray-50" />
+                </label>
+                <label class="flex flex-col gap-1">
+                  Pause: complaint %
+                  <input v-model.number="monitorForm.reputation.pauseComplaintPct" type="number" step="0.01" min="0.01" max="5" :disabled="!canEdit || !monitorForm.reputation.enabled" class="border border-gray-300 rounded-lg px-2 py-1 text-sm text-dark disabled:bg-gray-50" />
+                </label>
+                <label class="flex flex-col gap-1 col-span-2">
+                  Ignore stores with fewer recipients than
+                  <input v-model.number="monitorForm.reputation.minSends" type="number" step="1" min="1" :disabled="!canEdit || !monitorForm.reputation.enabled" class="border border-gray-300 rounded-lg px-2 py-1 text-sm text-dark w-32 disabled:bg-gray-50" />
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label class="flex flex-col text-xs text-gray-600 gap-1">
+              Recipients (one per line)
+              <textarea
+                v-model="monitorForm.recipients"
+                rows="4"
+                :disabled="!canEdit"
+                placeholder="ops@example.com"
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm text-dark font-mono disabled:bg-gray-50"
+              />
+            </label>
+            <div v-if="canEdit" class="flex justify-end">
+              <button
+                type="submit"
+                :disabled="monitorSaving"
+                class="bg-teal text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-teal-dark disabled:opacity-50"
+              >
+                {{ monitorSaving ? 'Saving…' : 'Save settings' }}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div v-if="monitorTab === 'runs' && monitor?.runs.length" class="mt-4">
+          <p class="text-xs text-gray-500">The last 10 runs, newest first — scheduled and manual.</p>
+          <div class="overflow-x-auto mt-2">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-gray-500">
+                  <th class="py-1.5 pr-4 font-medium">Started</th>
+                  <th class="py-1.5 pr-4 font-medium">Trigger</th>
+                  <th class="py-1.5 pr-4 font-medium">Result</th>
+                  <th class="py-1.5 pr-4 font-medium">Stores</th>
+                  <th class="py-1.5 pr-4 font-medium">Status changes</th>
+                  <th class="py-1.5 pr-4 font-medium">Plan changes</th>
+                  <th class="py-1.5 pr-4 font-medium">Email</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="run in monitor.runs" :key="run.id" class="align-top">
+                  <td class="py-1.5 pr-4 whitespace-nowrap text-gray-700" :title="formatDate(run.startedAt)">
+                    {{ relative(run.startedAt) }}
+                  </td>
+                  <td class="py-1.5 pr-4 text-gray-600">{{ run.trigger === 'schedule' ? 'scheduled' : 'manual' }}</td>
+                  <td class="py-1.5 pr-4">
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="runStatusClass(run.status)">
+                      {{ run.status }}
+                    </span>
+                    <p v-if="run.error" class="text-xs text-red-600 mt-1 max-w-xs">{{ run.error }}</p>
+                  </td>
+                  <td class="py-1.5 pr-4 text-gray-700">{{ run.summary?.storesChecked ?? '—' }}</td>
+                  <td class="py-1.5 pr-4 text-gray-700">
+                    {{ run.summary?.counts.statusChanges ?? '—' }}
+                    <ul v-if="run.summary?.statusChanges.length" class="mt-1 text-xs text-gray-500">
+                      <li v-for="(c, i) in run.summary.statusChanges.slice(0, 5)" :key="i">
+                        {{ shopLabel(c.shop) }} ({{ c.region }}): {{ c.from }} → <b>{{ c.to }}</b>
+                      </li>
+                    </ul>
+                  </td>
+                  <td class="py-1.5 pr-4 text-gray-700">
+                    {{ run.summary?.counts.planChanges ?? '—' }}
+                    <span v-if="run.summary?.counts.planErrors" class="text-red-600">
+                      ({{ run.summary.counts.planErrors }} failed)
+                    </span>
+                    <ul v-if="run.summary?.planChanges.length" class="mt-1 text-xs text-gray-500">
+                      <li v-for="(c, i) in run.summary.planChanges.slice(0, 5)" :key="i">
+                        {{ c.shop }}: {{ c.action }}
+                      </li>
+                    </ul>
+                  </td>
+                  <td class="py-1.5 pr-4 text-xs">
+                    <span v-if="!run.summary">—</span>
+                    <span v-else-if="run.summary.emailed" class="text-green-700">sent</span>
+                    <span v-else-if="run.summary.emailError" class="text-red-600" :title="run.summary.emailError">failed</span>
+                    <span v-else class="text-gray-500">nothing to report</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p v-else-if="monitorTab === 'runs' && monitor" class="text-sm text-gray-500 mt-4">No runs yet.</p>
+      </div>
+
+      <!-- Region summary: one line per region; details on demand -->
+      <div v-if="regions.length" class="bg-white border border-gray-200 rounded-lg px-4 py-2.5 mb-4">
+        <div class="flex items-center gap-x-5 gap-y-2 flex-wrap">
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Regions</span>
+          <div
+            v-for="region in regions"
+            :key="region.providerKey"
+            class="flex items-center gap-2 text-xs text-gray-700"
+          >
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="regionNeedsAttention(region) ? 'bg-red-500' : 'bg-green-500'"
+              :title="regionNeedsAttention(region) ? 'Pool, platform or a tenant here needs attention' : 'All tenants here can send'"
+            />
+            <span class="font-mono font-semibold">{{ region.region }}</span>
+            <span
+              class="px-1.5 py-0.5 rounded-full"
+              :class="region.isActive ? 'bg-teal text-white' : 'bg-gray-100 text-gray-600'"
+            >
+              {{ region.isActive ? 'sending' : 'standby' }}
+            </span>
+            <span class="text-gray-500">
+              {{ region.dedicatedCount }} premium · {{ region.freeStoreCount }} free ·
+              {{ region.healthyCount }}/{{ region.tenantCount }} tenants sendable
+            </span>
+            <span
+              v-if="!['ENABLED', 'REINSTATED'].includes(region.poolStatus || '')"
+              class="px-1.5 py-0.5 rounded-full"
+              :class="statusClass(region.poolStatus || 'MISSING')"
+            >
+              pool: {{ region.poolStatus || 'none' }}
+            </span>
+          </div>
+          <button
+            type="button"
+            @click="showRegionDetails = !showRegionDetails"
+            class="ml-auto text-xs text-teal hover:underline"
+          >
+            {{ showRegionDetails ? 'Hide details' : 'Details & actions' }}
+          </button>
+        </div>
+      </div>
+
       <!-- Region cards: which region is live, and how full each one is -->
-      <div v-if="regions.length" class="grid gap-4 mb-6" :class="regions.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'">
+      <div v-if="regions.length && showRegionDetails" class="grid gap-4 mb-6" :class="regions.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'">
         <div
           v-for="region in regions"
           :key="region.providerKey"
@@ -911,10 +1529,32 @@ const relative = (value: string | null) => {
                 </span>
               </div>
               <p class="text-xs text-gray-500 mt-1 font-mono">{{ region.providerKey }}</p>
+              <p class="text-xs text-gray-600 mt-2">
+                <b>{{ region.dedicatedCount }}</b> premium ·
+                <b>{{ region.freeStoreCount }}</b> on the free pool
+              </p>
+              <div class="flex flex-wrap gap-1.5 mt-1.5">
+                <span
+                  class="text-xs px-2 py-0.5 rounded-full"
+                  :class="statusClass(region.poolStatus || 'MISSING')"
+                  title="The shared tenant every free-plan store sends under"
+                >
+                  pool: {{ region.poolStatus || 'none' }}
+                </span>
+                <span
+                  class="text-xs px-2 py-0.5 rounded-full"
+                  :class="statusClass(region.platformStatus || 'MISSING')"
+                  title="Our own alerts and notices send under this tenant"
+                >
+                  platform: {{ region.platformStatus || 'none' }}
+                </span>
+              </div>
             </div>
 
             <div class="text-right flex-shrink-0">
-              <p class="text-2xl font-bold text-dark leading-none">{{ region.tenantCount }}</p>
+              <p class="text-2xl font-bold text-dark leading-none" title="Tenants in AWS here — what is billed">
+                {{ region.tenantCount }}
+              </p>
               <p class="text-xs text-gray-500 mt-1">
                 <span :class="region.healthyCount < region.tenantCount ? 'text-amber-600 font-medium' : ''">
                   {{ region.healthyCount }} sendable
@@ -1069,13 +1709,17 @@ const relative = (value: string | null) => {
         class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6"
       >
         <p class="text-sm text-gray-800">
-          <b>{{ data.missingCount }}</b> active store(s) have no usable tenant in
+          <b>{{ data.missingCount }}</b> tenant(s) need attention in
           <b class="font-mono">{{ shownRegion?.region || 'the active region' }}</b
           >.
         </p>
         <p class="text-xs text-gray-600 mt-1">
-          SES rejects mail that names no tenant, so these stores cannot send from this region until
-          they have one. A store whose tenant was deleted appears here.
+          <template v-if="data.missing.includes('__free__')">
+            <b class="text-red-700">The free pool has no working tenant here — free-plan stores cannot
+            send from this region.</b>
+          </template>
+          Premium stores listed here have no working dedicated tenant and are sending under the free
+          pool meanwhile. The free-pool and platform tenants appear here when they are missing.
         </p>
 
         <div v-if="data.missing.length" class="mt-3 flex flex-wrap gap-2">
@@ -1084,7 +1728,7 @@ const relative = (value: string | null) => {
             :key="shop"
             class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg pl-3 pr-1 py-1"
           >
-            <span class="text-xs text-dark font-mono">{{ shop }}</span>
+            <span class="text-xs text-dark font-mono">{{ shopLabel(shop) }}</span>
             <LoadingIcon v-if="busyShop === shop" size="xs" />
             <button
               v-else-if="canEdit"
@@ -1096,10 +1740,15 @@ const relative = (value: string | null) => {
             </button>
           </div>
           <span v-if="data.missing.length > 40" class="text-xs text-gray-500 self-center">
-            +{{ data.missing.length - 40 }} more — use "Create missing tenants"
+            +{{ data.missing.length - 40 }} more — use "Fill active region"
           </span>
         </div>
       </div>
+
+      <p v-if="data && data.unassignedCount > 0" class="text-xs text-gray-500 mb-4">
+        {{ data.unassignedCount }} free store(s) have no pool record in this region yet. They still
+        send under the pool; "Fill active region" or the daily check adds the records.
+      </p>
 
       <!-- Tenant table -->
       <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -1108,6 +1757,7 @@ const relative = (value: string | null) => {
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Store</th>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Type</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Region</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Tenant</th>
                 <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">SES status</th>
@@ -1121,6 +1771,7 @@ const relative = (value: string | null) => {
               <template v-if="loading && !data">
                 <tr v-for="i in 6" :key="i">
                   <td class="px-6 py-4"><SkeletonLoader width="180px" height="16px" /></td>
+                  <td class="px-6 py-4"><SkeletonLoader width="70px" height="20px" custom-class="rounded-full" /></td>
                   <td class="px-6 py-4"><SkeletonLoader width="80px" height="16px" /></td>
                   <td class="px-6 py-4"><SkeletonLoader width="150px" height="16px" /></td>
                   <td class="px-6 py-4"><SkeletonLoader width="70px" height="24px" custom-class="rounded-full" /></td>
@@ -1131,13 +1782,14 @@ const relative = (value: string | null) => {
               </template>
 
               <tr v-else-if="!rows.length">
-                <td colspan="7" class="py-16 text-center text-gray-400">
+                <td colspan="8" class="py-16 text-center text-gray-400">
                   <p class="text-sm italic">
-                    <template v-if="statusFilter !== 'all'">No tenants match this filter.</template>
+                    <template v-if="statusFilter === 'risky'">No store is over a warning or pause limit.</template>
+                    <template v-else-if="statusFilter !== 'all'">No tenants match this filter.</template>
                     <template v-else-if="search">No tenants match "{{ search }}".</template>
                     <template v-else>
                       No tenants yet for {{ selectedApp?.app_name }}.
-                      <span v-if="canEdit">Use "Create missing tenants" to provision them.</span>
+                      <span v-if="canEdit">Use "Fill active region" to set them up.</span>
                     </template>
                   </p>
                 </td>
@@ -1153,14 +1805,13 @@ const relative = (value: string | null) => {
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-sm font-medium text-gray-900">
-                      {{ row.isPlatform ? 'Platform (our own mail)' : row.shop }}
-                    </span>
-                    <span
-                      v-if="row.isPlatform"
-                      class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700"
-                      title="Install and uninstall notices, spam alerts and billing warnings send under this tenant instead of borrowing a merchant's"
-                    >
-                      system
+                      {{
+                        row.isPlatform
+                          ? 'Platform (our own mail)'
+                          : row.isPool
+                            ? 'Free pool (every free-plan store)'
+                            : row.shop
+                      }}
                     </span>
                     <span
                       v-if="row.localStatus === 'paused'"
@@ -1172,8 +1823,51 @@ const relative = (value: string | null) => {
                   <p v-if="row.localStatus === 'paused'" class="text-xs text-red-700 mt-1">
                     {{ row.pausedReason }}
                     <span class="text-gray-500">
-                      — {{ row.pausedBy || 'unknown' }}, {{ formatDate(row.pausedAt) }}
+                      — {{ row.pausedBy === 'reputation' ? 'auto (reputation check)' : row.pausedBy || 'unknown' }},
+                      {{ formatDate(row.pausedAt) }}
                     </span>
+                  </p>
+                  <p
+                    v-if="!isSystemRow(row) && rates(row)"
+                    class="text-xs mt-1"
+                    :class="
+                      rates(row)!.level === 'pause'
+                        ? 'text-red-700 font-medium'
+                        : rates(row)!.level === 'warn'
+                          ? 'text-amber-700 font-medium'
+                          : 'text-gray-500'
+                    "
+                    :title="`${rates(row)!.bounced} bounced and ${rates(row)!.complained} complaint(s) out of ${rates(row)!.sent} recipients, ${row.reputationSince ? 'since the store was resumed' : 'over the last 7 days'}. ${rates(row)!.level === null ? 'Too few recipients to be judged yet (see Daily check → Store reputation).' : 'Judged against the Daily check → Store reputation limits.'}`"
+                  >
+                    {{ row.reputationSince ? 'since resume' : '7d' }}: {{ rates(row)!.sent }} sent · bounce {{ rates(row)!.bounce }}% ·
+                    complaints {{ rates(row)!.complaint }}%
+                    <span v-if="rates(row)!.level === null" class="text-gray-400">(too few to judge)</span>
+                  </p>
+                </td>
+
+                <!-- Type -->
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span
+                    class="text-xs font-medium px-2 py-0.5 rounded-full"
+                    :class="typeClass(row.tenantType)"
+                    :title="
+                      row.tenantType === 'free'
+                        ? 'Free plan: sends under the shared free-pool tenant'
+                        : row.tenantType === 'dedicated'
+                          ? 'Premium: its own tenant and reputation'
+                          : row.isPlatform
+                            ? 'Install and uninstall notices, spam alerts and billing warnings send under this tenant'
+                            : 'Shared by every free-plan store in this region'
+                    "
+                  >
+                    {{ typeLabel(row.tenantType) }}
+                  </span>
+                  <p
+                    v-if="row.region.retiredTenantName"
+                    class="text-xs text-amber-700 mt-1"
+                    title="Given up on downgrade; AWS has not confirmed the delete yet. Retried daily."
+                  >
+                    old tenant pending delete
                   </p>
                 </td>
 
@@ -1197,6 +1891,15 @@ const relative = (value: string | null) => {
                 <!-- SES status -->
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span
+                    v-if="row.tenantType === 'free'"
+                    class="text-xs font-medium px-2 py-0.5 rounded-full"
+                    :class="statusClass(row.region.poolStatus || 'MISSING')"
+                    title="A free-plan store sends as well as its region's pool does"
+                  >
+                    via pool: {{ row.region.poolStatus || 'no pool' }}
+                  </span>
+                  <span
+                    v-else
                     class="text-xs font-medium px-2 py-0.5 rounded-full"
                     :class="statusClass(row.region.sendingStatus)"
                   >
@@ -1209,8 +1912,9 @@ const relative = (value: string | null) => {
 
                 <!-- Resource associations -->
                 <td class="px-6 py-4 whitespace-nowrap">
+                  <span v-if="row.tenantType === 'free'" class="text-xs text-gray-400">—</span>
                   <span
-                    v-if="row.region.resourcesLinked"
+                    v-else-if="row.region.resourcesLinked"
                     class="text-xs text-green-700"
                     title="Identity and configuration set are both associated with this tenant"
                   >
@@ -1238,6 +1942,17 @@ const relative = (value: string | null) => {
                     <LoadingIcon v-if="busyShop === row.shop" size="xs" />
 
                     <button
+                      v-if="!isSystemRow(row)"
+                      @click="recheckPlan(row)"
+                      :disabled="busyShop !== null"
+                      class="text-xs px-2.5 py-1 rounded-lg border disabled:opacity-40 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                      title="Look up this store's plan in Shopify now and move it to match: premium gets a dedicated tenant, free goes to the shared pool."
+                    >
+                      Check plan
+                    </button>
+
+                    <button
+                      v-if="row.tenantType !== 'free'"
                       @click="provisionOne(row.shop, false, row.region.providerKey)"
                       :disabled="busyShop !== null"
                       class="text-xs px-2.5 py-1 rounded-lg border disabled:opacity-40 border-blue-200 text-blue-700 hover:bg-blue-50"
@@ -1265,7 +1980,7 @@ const relative = (value: string | null) => {
                     </button>
 
                     <button
-                      v-if="regions.length > 1"
+                      v-if="regions.length > 1 && row.tenantType !== 'free'"
                       @click="addToRegion(row)"
                       :disabled="busyShop !== null"
                       class="text-xs px-2.5 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
@@ -1275,10 +1990,11 @@ const relative = (value: string | null) => {
                     </button>
 
                     <button
+                      v-if="row.tenantType !== 'free'"
                       @click="rotateTenant(row)"
                       :disabled="busyShop !== null"
                       class="text-xs px-2.5 py-1 rounded-lg border disabled:opacity-40 border-red-300 text-red-700 hover:bg-red-50"
-                      title="Deletes this tenant and creates a new one under a new name. SES reputation and history start over — use Re-provision to repair a broken tenant instead."
+                      title="Creates a new tenant under a new name, switches to it once it can send, then deletes this one. SES reputation and history start over — use Re-provision to repair a broken tenant instead."
                     >
                       Replace
                     </button>
@@ -1299,11 +2015,56 @@ const relative = (value: string | null) => {
         </div>
 
         <div
-          v-if="data && rows.length"
-          class="px-6 py-3 border-t border-gray-200 bg-gray-50 text-xs text-gray-500"
+          v-if="data && data.total"
+          class="px-6 py-3 border-t border-gray-200 bg-gray-50 text-xs text-gray-600 flex items-center gap-4 flex-wrap"
         >
-          Showing {{ rows.length }} of {{ allRows.length }} tenant row(s)
-          <span v-if="regionFilter"> in {{ shownRegion?.region }}</span>
+          <span>
+            Stores {{ pageStart }}–{{ pageEnd }} of {{ data.total }}
+            <span v-if="regionFilter"> in {{ shownRegion?.region }}</span>
+          </span>
+
+          <label class="flex items-center gap-1.5">
+            Per page
+            <select v-model.number="pageSize" class="border border-gray-300 rounded px-1.5 py-0.5 bg-white">
+              <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
+            </select>
+          </label>
+
+          <div class="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              @click="page = 1"
+              :disabled="page <= 1 || loading"
+              class="px-2 py-1 rounded border border-gray-300 bg-white disabled:opacity-40"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              @click="page--"
+              :disabled="page <= 1 || loading"
+              class="px-2 py-1 rounded border border-gray-300 bg-white disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span class="px-2">Page {{ page }} of {{ pageCount }}</span>
+            <button
+              type="button"
+              @click="page++"
+              :disabled="page >= pageCount || loading"
+              class="px-2 py-1 rounded border border-gray-300 bg-white disabled:opacity-40"
+            >
+              Next
+            </button>
+            <button
+              type="button"
+              @click="page = pageCount"
+              :disabled="page >= pageCount || loading"
+              class="px-2 py-1 rounded border border-gray-300 bg-white disabled:opacity-40"
+            >
+              »
+            </button>
+          </div>
         </div>
       </div>
     </template>
