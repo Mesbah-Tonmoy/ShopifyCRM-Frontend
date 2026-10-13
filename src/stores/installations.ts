@@ -30,6 +30,8 @@ export const useInstallationsStore = defineStore('installations', () => {
     sort_order?: string;
     date_from?: string;
     date_to?: string;
+    /** IANA zone the date bounds are calendar days in. */
+    timezone?: string;
     plan_name?: string[];
     shopify_plans?: string[];
     install_count_min?: number;

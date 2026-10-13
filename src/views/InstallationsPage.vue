@@ -75,6 +75,12 @@ const statusOptions = [
     { label: 'Uninstalled', value: false }
 ];
 
+/**
+ * The viewer's IANA timezone, e.g. "Asia/Dhaka". Falls back to UTC on the rare
+ * runtime that cannot report one, which is what the API assumes anyway.
+ */
+const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
 // Handle date range changes
 const handleDateChange = (newDate: Date[] | null) => {
   if (newDate && newDate.length === 2 && newDate[0] && newDate[1]) {
@@ -163,6 +169,11 @@ const fetchData = async () => {
     search: searchQuery.value || undefined,
     date_from: dateFrom.value || undefined,
     date_to: dateTo.value || undefined,
+    // The picker gives calendar days in the browser's zone and the table
+    // renders install dates in it too, so the filter has to be read in the
+    // same zone - otherwise an evening install east of UTC lands on the
+    // neighbouring day on one side only.
+    timezone: dateFrom.value || dateTo.value ? browserTimezone : undefined,
     per_page: perPage.value,
     page: currentPage.value,
     sort_by: sortBy.value || undefined,
