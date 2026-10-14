@@ -8,10 +8,11 @@ import { VueDatePicker } from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import dayjs from 'dayjs';
 import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths } from 'date-fns';
-import { exportToCSV } from '@/utils/export';
+import { saveBlob } from '@/utils/export';
+import { apiService } from '@/config/api';
+import { Toast } from '@/utils/toast';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import type { Installation } from '@/types';
 
 const installationsStore = useInstallationsStore();
 const authStore = useAuthStore();
@@ -164,27 +165,38 @@ const setDateRange = (direction: 'previous' | 'next') => {
     handleDateChange(date.value);
 }
 
+/**
+ * Everything currently narrowing the list, minus pagination.
+ *
+ * Shared by the table and the export so a download cannot apply a different
+ * set of filters from the one on screen.
+ */
+const currentFilters = () => ({
+  search: searchQuery.value || undefined,
+  date_from: dateFrom.value || undefined,
+  date_to: dateTo.value || undefined,
+  // The picker gives calendar days in the browser's zone and the table
+  // renders install dates in it too, so the filter has to be read in the
+  // same zone - otherwise an evening install east of UTC lands on the
+  // neighbouring day on one side only. Sent whether or not a date filter is
+  // set, because the export also writes its Installed column in this zone.
+  timezone: browserTimezone,
+  sort_by: sortBy.value || undefined,
+  sort_order: sortOrder.value,
+  plan_name: selectedPlans.value.length ? selectedPlans.value : undefined,
+  shopify_plans: selectedShopifyPlans.value.length ? selectedShopifyPlans.value : undefined,
+  is_active: selectedStatuses.value.length === 1 ? selectedStatuses.value[0] : undefined,
+  // v-model.number leaves '' behind when a box is cleared
+  install_count_min: typeof installCountMin.value === 'number' ? installCountMin.value : undefined,
+  install_count_max: typeof installCountMax.value === 'number' ? installCountMax.value : undefined,
+  app_id: appId.value,
+});
+
 const fetchData = async () => {
   await installationsStore.fetchInstallations({
-    search: searchQuery.value || undefined,
-    date_from: dateFrom.value || undefined,
-    date_to: dateTo.value || undefined,
-    // The picker gives calendar days in the browser's zone and the table
-    // renders install dates in it too, so the filter has to be read in the
-    // same zone - otherwise an evening install east of UTC lands on the
-    // neighbouring day on one side only.
-    timezone: dateFrom.value || dateTo.value ? browserTimezone : undefined,
+    ...currentFilters(),
     per_page: perPage.value,
     page: currentPage.value,
-    sort_by: sortBy.value || undefined,
-    sort_order: sortOrder.value,
-    plan_name: selectedPlans.value.length ? selectedPlans.value : undefined,
-    shopify_plans: selectedShopifyPlans.value.length ? selectedShopifyPlans.value : undefined,
-    is_active: selectedStatuses.value.length === 1 ? selectedStatuses.value[0] : undefined,
-    // v-model.number leaves '' behind when a box is cleared
-    install_count_min: typeof installCountMin.value === 'number' ? installCountMin.value : undefined,
-    install_count_max: typeof installCountMax.value === 'number' ? installCountMax.value : undefined,
-    app_id: appId.value,
   });
 };
 
@@ -219,29 +231,53 @@ const handleSort = (column: string) => {
   applyFilters();
 };
 
-const handleExport = () => {
-  if (paginatedInstallations.value.length === 0) {
-    alert('No data to export');
+const exporting = ref(false);
+
+/**
+ * Download every row the current filters match, not just the page on screen.
+ *
+ * The server builds the file from the same query the list uses and streams
+ * it back, so the size of the result does not depend on the page size and the
+ * browser never has to hold the whole set.
+ */
+const handleExport = async () => {
+  if ((installationsStore.pagination?.total ?? 0) === 0) {
+    Toast.fire({ icon: 'info', title: 'Nothing to export for these filters' });
     return;
   }
 
-  // Define headers
-  const headers = ['App', 'Store', 'Email', 'Plan', 'Shopify Plan', 'Status', 'Installs', 'Installed'];
-  
-  // Map data to rows
-  const rows = paginatedInstallations.value.map((item: Installation) => [
-    item.app?.app_name || 'N/A',
-    item.store_name,
-    item.email,
-    getPlanDetails(item.app_plan)?.name || 'No plan',
-    getShopifyPlan(item.shopify_plan),
-    getStatusText(item.is_active),
-    item.install_count,
-    item.installed_at ? dayjs(item.installed_at).format('MMM DD, YYYY') : 'N/A'
-  ]);
+  exporting.value = true;
 
-  const filename = `installations_export_${new Date().toISOString().split('T')[0]}`;
-  exportToCSV(filename, headers, rows);
+  try {
+    const params = new URLSearchParams();
+
+    Object.entries(currentFilters()).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+
+      if (Array.isArray(value)) {
+        value.forEach((entry) => params.append(`${key}[]`, String(entry)));
+      } else {
+        params.append(key, String(value));
+      }
+    });
+
+    const fallback = `installations_export_${dayjs().format('YYYY-MM-DD')}.csv`;
+    const { blob, filename } = await apiService.download(
+      `/installations/export?${params.toString()}`,
+      fallback
+    );
+
+    saveBlob(blob, filename);
+
+    Toast.fire({
+      icon: 'success',
+      title: `Exported ${(installationsStore.pagination?.total ?? 0).toLocaleString()} installations`,
+    });
+  } catch (err) {
+    Toast.fire({ icon: 'error', title: (err as Error).message || 'Export failed' });
+  } finally {
+    exporting.value = false;
+  }
 };
 
 // No client-side sorting needed - handled by server
@@ -562,12 +598,23 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
               <button
                 v-if="authStore.hasPermission('installations.export')"
                 @click="handleExport"
-                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal cursor-pointer"
+                :disabled="exporting"
+                :title="`Export all ${(installationsStore.pagination?.total ?? 0).toLocaleString()} matching installations`"
+                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg class="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  v-if="exporting"
+                  class="-ml-1 mr-2 h-5 w-5 animate-spin text-gray-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                <svg v-else class="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Export
+                {{ exporting ? 'Exporting...' : 'Export' }}
               </button>
             </div>
           </div>

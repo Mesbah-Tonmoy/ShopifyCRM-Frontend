@@ -94,6 +94,48 @@ class ApiService {
   }
 
   /**
+   * Fetch a file rather than JSON, and hand back the blob plus the name the
+   * server gave it.
+   *
+   * A plain link or window.open cannot be used for these: the API is
+   * authenticated with a bearer token, which only an explicit fetch carries.
+   */
+  async download(endpoint: string, fallbackFilename: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/csv, application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
+    });
+
+    if (!response.ok) {
+      // A failure still comes back as the API's JSON envelope.
+      let message = 'Download failed';
+      try {
+        const data = await response.json();
+        message = data.message || message;
+      } catch {
+        // Not JSON - keep the generic message.
+      }
+
+      const error: ApiError = new Error(message);
+      error.status = response.status;
+      throw error;
+    }
+
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+
+    return {
+      blob: await response.blob(),
+      filename: match?.[1] ?? fallbackFilename,
+    };
+  }
+
+  /**
    * `body` is optional because most deletes address the resource in the path.
    * Some need a payload instead - deleting a store's SES tenants is keyed by
    * shop domain, which does not belong in a URL path segment.

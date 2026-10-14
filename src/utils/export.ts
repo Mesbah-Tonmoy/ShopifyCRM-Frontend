@@ -1,4 +1,27 @@
 /**
+ * Hands a blob to the browser as a download.
+ *
+ * Shared by the client-side CSV builder below and by downloads the server
+ * generates, which arrive as a blob because the API needs an auth header and
+ * so cannot be fetched by a plain link.
+ */
+export const saveBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Without this the blob is held until the tab is closed.
+    URL.revokeObjectURL(url);
+};
+
+/**
  * Exports data to a CSV file.
  * 
  * @param filename The name of the file to download (without extension).
@@ -25,16 +48,5 @@ export const exportToCSV = (filename: string, headers: string[], rows: (string |
         })
     ].join('\n');
 
-    // Create downloadable link
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `${filename}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+    saveBlob(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), `${filename}.csv`);
 };

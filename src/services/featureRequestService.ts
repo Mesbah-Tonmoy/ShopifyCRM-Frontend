@@ -97,6 +97,13 @@ export interface FeatureRequestFilters {
     is_visible?: boolean;
     date_from?: string;
     date_to?: string;
+    /**
+     * IANA zone the date bounds are calendar days in, e.g. "Asia/Dhaka".
+     * Send it whenever a date bound is set: without it the API reads the days
+     * as UTC, which puts an evening request on the neighbouring day from the
+     * one the list shows. An unknown value falls back to the app timezone.
+     */
+    timezone?: string;
     per_page?: number;
     page?: number;
 }
