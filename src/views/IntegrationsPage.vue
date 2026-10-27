@@ -7,6 +7,7 @@ import { Toast } from '@/utils/toast';
 import { LoadingIcon } from '@/components/icons';
 import PageHeader from '@/components/common/PageHeader.vue';
 import MailDeliverySettings from '@/components/integrations/MailDeliverySettings.vue';
+import GoogleChatSettings from '@/components/integrations/GoogleChatSettings.vue';
 
 interface IntegrationField {
   key: string;
@@ -157,7 +158,7 @@ const save = async (key: string) => {
 
 <template>
   <div>
-    <PageHeader title="Integrations" description="Connect Slack and choose how this CRM sends email" />
+    <PageHeader title="Integrations" description="Connect Slack and Google Chat, and choose how this CRM sends email" />
 
     <div v-if="loading" class="flex justify-center py-12">
       <LoadingIcon size="md" />
@@ -233,6 +234,8 @@ const save = async (key: string) => {
           </button>
         </div>
       </div>
+
+      <GoogleChatSettings />
 
       <MailDeliverySettings />
     </div>

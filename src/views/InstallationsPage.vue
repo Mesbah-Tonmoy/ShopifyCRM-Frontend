@@ -355,6 +355,28 @@ const getStatusText = (isActive: boolean) => {
   return isActive ? 'Installed' : 'Uninstalled';
 };
 
+/**
+ * Tint for the store-name badge.
+ *
+ * install_count is 1 for a store that installed once and stayed. Anything
+ * higher is a reinstall, so the badge escalates with how often a store has
+ * churned: grey for the ordinary case, amber for a few, red for a lot.
+ *
+ * Shared by the name badge and the count badge beside it, so the pair always
+ * reads as one thing rather than two colours disagreeing.
+ */
+const getInstallCountColor = (count: number) => {
+  if (count > 5) return 'bg-red-100 text-red-800';
+  if (count > 1) return 'bg-amber-100 text-amber-800';
+  return 'bg-gray-100 text-gray-800';
+};
+
+const getInstallCountTitle = (count: number) => {
+  if (count <= 1) return 'Installed once, never reinstalled';
+
+  return `Installed ${count} times (${count - 1} reinstall${count === 2 ? '' : 's'})`;
+};
+
 const getPlanDetails = (appPlan: string | null) => {
   if (!appPlan) return null;
   
@@ -703,17 +725,6 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                   <th 
                     scope="col" 
                     class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('install_count')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Installs</span>
-                      <SortIcon v-if="sortBy !== 'install_count'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
                     @click="handleSort('installed_at')"
                   >
                     <div class="flex items-center space-x-1">
@@ -728,12 +739,11 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                 <template v-if="installationsStore.loading">
                   <tr v-for="i in 5" :key="i">
                     <td v-if="!appId" class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="150px" height="16px" /></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="150px" height="24px" custom-class="rounded-full" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="200px" height="16px" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="24px" custom-class="rounded-full" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="24px" custom-class="rounded-full" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="40px" height="16px" /></td>
                     <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
                   </tr>
                 </template>
@@ -742,8 +752,25 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     <div class="text-sm font-medium text-gray-900">{{ installation.app?.app_name || 'N/A' }}</div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center gap-1.5 text-sm font-medium text-gray-900">
-                      <span>{{ installation.store_name }}</span>
+                    <div class="flex items-center gap-1.5 text-sm font-medium">
+                      <span
+                        :class="[
+                          'inline-flex items-center rounded-full px-2.5 py-0.5',
+                          getInstallCountColor(installation.install_count)
+                        ]"
+                        :title="getInstallCountTitle(installation.install_count)"
+                      >
+                        {{ installation.store_name }}
+                      </span>
+                      <span
+                        :class="[
+                          'inline-flex items-center rounded-full px-2 text-xs leading-5 font-semibold tabular-nums',
+                          getInstallCountColor(installation.install_count)
+                        ]"
+                        :title="getInstallCountTitle(installation.install_count)"
+                      >
+                        {{ installation.install_count }}
+                      </span>
                       <a 
                         v-if="installation.store_url" 
                         :href="'https://' + installation.store_url" 
@@ -792,9 +819,6 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
                     <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getStatusColor(installation.is_active)]">
                       {{ getStatusText(installation.is_active) }}
                     </span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ installation.install_count }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {{ installation.installed_at ? dayjs(installation.installed_at).format('MMM DD, YYYY') : 'N/A' }}
