@@ -46,7 +46,7 @@ export interface SmtpProvider {
    * app, not a setting - SES rejects untenanted mail outright.
    */
   requiresTenant: boolean;
-  extra: Record<string, any> | null;
+  extra: Record<string, unknown> | null;
   lastTestedAt: string | null;
   lastTestStatus: 'success' | 'failed' | null;
   lastTestError: string | null;
@@ -104,7 +104,7 @@ export interface SmtpProviderPayload {
   awsSecretAccessKey?: string;
   sesIdentityArn?: string | null;
   sesConfigurationSetArn?: string | null;
-  extra?: Record<string, any> | null;
+  extra?: Record<string, unknown> | null;
 }
 
 export const smtpProviderService = {

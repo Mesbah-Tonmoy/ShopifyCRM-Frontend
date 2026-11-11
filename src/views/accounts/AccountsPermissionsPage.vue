@@ -1,13 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { aclService, type Permission, type Role } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
-import Swal from 'sweetalert2';
 
-import { CloseIcon, PlusIcon, LoadingIcon } from '@/components/icons';
+import { Plus } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import { Toast } from '@/utils/toast';
+import PermissionChecklist from '@/components/common/PermissionChecklist.vue';
+import { toast } from '@/utils/toast';
 
 const roles = ref<Role[]>([]);
 const allPermissions = ref<Permission[]>([]);
@@ -63,62 +72,17 @@ const selectRole = (role: Role) => {
   originalPermissionIds.value = [...selectedPermissionIds.value];
 };
 
-const isPermissionSelected = (id: number) => {
-  return selectedPermissionIds.value.includes(id);
+// Role picker (ToggleGroup) hands back the role id as a string.
+const onRolePicked = (value: unknown) => {
+  const role = roles.value.find(r => String(r.id) === value);
+  if (role) selectRole(role);
 };
 
-const togglePermission = (id: number) => {
-  const index = selectedPermissionIds.value.indexOf(id);
-  if (index > -1) {
-    selectedPermissionIds.value.splice(index, 1);
-  } else {
-    selectedPermissionIds.value.push(id);
-  }
-};
-
-const isGroupSelected = (groupPermissions: Permission[]) => {
-  return groupPermissions.length > 0 && groupPermissions.every(p => selectedPermissionIds.value.includes(p.id));
-};
-
-const toggleGroup = (groupPermissions: Permission[]) => {
-  const allSelected = isGroupSelected(groupPermissions);
-  groupPermissions.forEach(p => {
-    const index = selectedPermissionIds.value.indexOf(p.id);
-    if (allSelected) {
-      if (index > -1) selectedPermissionIds.value.splice(index, 1);
-    } else {
-      if (index === -1) selectedPermissionIds.value.push(p.id);
-    }
-  });
-};
-
-const permissionGroups = computed<Record<string, { title: string, permissions: Permission[] }>>(() => {
-  const groups: Record<string, { title: string, permissions: Permission[] }> = {
-    roles: { title: 'Roles', permissions: [] },
-    permissions: { title: 'Permission Groups', permissions: [] },
-    users: { title: 'Users', permissions: [] },
-    apps: { title: 'Apps', permissions: [] },
-    installations: { title: 'Installations', permissions: [] },
-    email_templates: { title: 'Email Templates', permissions: [] },
-    pricing_plans: { title: 'Pricing Plans', permissions: [] },
-    integrations: { title: 'Integrations', permissions: [] },
-    features: { title: 'Features', permissions: [] },
-    smtp: { title: 'SMTP Setup', permissions: [] },
-    ses_tenants: { title: 'SES Tenants', permissions: [] },
-  };
-
-  allPermissions.value.forEach(p => {
-    const key = p.slug.split('.')[0] || 'other';
-    if (groups[key]) {
-      groups[key].permissions.push(p);
-    } else {
-      const title = key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ');
-      groups[key] = { title, permissions: [p] };
-    }
-  });
-
-  return groups;
-});
+// Group keys shown in each section, in display order.
+const permissionSections = [
+  { title: 'Accounts', keys: ['roles', 'permissions', 'users'] },
+  { title: 'Data', keys: ['installations', 'email_templates', 'apps', 'pricing_plans', 'integrations', 'features', 'smtp', 'ses_tenants'] },
+];
 
 const savePermissions = async () => {
   if (!selectedRoleId.value) return;
@@ -136,10 +100,7 @@ const savePermissions = async () => {
     });
 
     if (response.success) {
-      Toast.fire({
-        icon: 'success',
-        title: 'Permissions updated successfully'
-      });
+      toast.success('Permissions updated successfully');
       // Update local role data
       const roleToUpdate = roles.value.find(r => r.id === selectedRoleId.value);
       if (roleToUpdate) {
@@ -149,8 +110,8 @@ const savePermissions = async () => {
       }
       originalPermissionIds.value = [...selectedPermissionIds.value];
     }
-  } catch (error) {
-    Swal.fire('Error', 'Failed to update permissions', 'error');
+  } catch {
+    toast.error('Error', { description: 'Failed to update permissions' });
   } finally {
     saving.value = false;
   }
@@ -172,13 +133,10 @@ const handleCreatePermission = async () => {
         showPermissionModal.value = false;
         newPermission.value = { name: '', slug: '', description: '' };
         
-        Toast.fire({
-          icon: 'success',
-          title: 'Permission created successfully'
-        });
+        toast.success('Permission created successfully');
       }
-  } catch (error) {
-    Swal.fire('Error', 'Failed to create permission', 'error');
+  } catch {
+    toast.error('Error', { description: 'Failed to create permission' });
   } finally {
     isCreatingPermission.value = false;
   }
@@ -194,482 +152,154 @@ onMounted(fetchInitialData);
       description="Manage user permissions" 
     />
 
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-      <!-- Top Active Roles and Add Button -->
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="flex flex-wrap items-center gap-2">
-          <button 
-            v-for="role in roles" 
-            :key="role.id"
-            @click="selectRole(role)"
-            :class="[
-              'px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border cursor-pointer',
-              selectedRoleId === role.id 
-                ? 'bg-teal/5 text-teal border-teal/20 shadow-sm' 
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            ]"
+    <Card class="mb-6 py-4">
+      <CardContent class="px-4">
+        <!-- Top Active Roles and Add Button -->
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            :spacing="2"
+            :model-value="selectedRoleId !== null ? String(selectedRoleId) : undefined"
+            class="flex-wrap"
+            @update:model-value="(v) => v && onRolePicked(v)"
           >
-            {{ role.name }}
-          </button>
+            <ToggleGroupItem
+              v-for="role in roles"
+              :key="role.id"
+              :value="String(role.id)"
+            >
+              {{ role.name }}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              v-if="authStore.hasPermission('permissions.add')"
+              @click="showPermissionModal = true"
+            >
+              <Plus />
+              Add Permission
+            </Button>
+          </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button 
-            v-if="authStore.hasPermission('permissions.add')"
-            @click="showPermissionModal = true"
-            class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
-          >
-            <PlusIcon size="sm" />
-            Add Permission
-          </button>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
 
-    <div class="bg-white rounded-xl border border-gray-200 p-8">
-      <div v-if="loading" class="space-y-12">
-        <!-- Skeleton Accounts Section -->
-        <div class="space-y-6">
-          <SkeletonLoader width="120px" height="28px" custom-class="border-l-4 border-teal pl-4" />
+    <Card class="py-8">
+      <CardContent v-if="loading" class="px-8 space-y-12">
+        <div v-for="(section, sIndex) in permissionSections" :key="section.title" class="space-y-6">
+          <Separator v-if="sIndex > 0" class="mb-6" />
+          <SkeletonLoader :width="sIndex === 0 ? '120px' : '80px'" height="28px" />
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
             <div v-for="i in 3" :key="i" class="space-y-4">
-              <SkeletonLoader width="80px" height="16px" />
+              <SkeletonLoader :width="sIndex === 0 ? '80px' : '100px'" height="16px" />
               <div class="space-y-3">
-                <SkeletonLoader v-for="j in 5" :key="j" width="100%" height="20px" />
+                <SkeletonLoader v-for="j in (sIndex === 0 ? 5 : 4)" :key="j" width="100%" height="20px" />
               </div>
             </div>
           </div>
         </div>
-        <!-- Skeleton Data Section -->
-        <div class="space-y-6 pt-6 border-t border-gray-100">
-          <SkeletonLoader width="80px" height="28px" custom-class="border-l-4 border-teal pl-4" />
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
-            <div v-for="i in 3" :key="i" class="space-y-4">
-              <SkeletonLoader width="100px" height="16px" />
-              <div class="space-y-3">
-                <SkeletonLoader v-for="j in 4" :key="j" width="100%" height="20px" />
-              </div>
-            </div>
+      </CardContent>
+
+      <template v-else>
+        <CardContent class="px-8 space-y-12">
+          <div v-for="(section, sIndex) in permissionSections" :key="section.title" class="space-y-6">
+            <Separator v-if="sIndex > 0" class="mb-6" />
+            <h2 class="font-heading text-xl font-semibold text-foreground border-l-4 border-primary pl-4">{{ section.title }}</h2>
+            <PermissionChecklist
+              v-model="selectedPermissionIds"
+              :permissions="allPermissions"
+              :group-keys="section.keys"
+              select-all
+              :id-prefix="`perm-${sIndex}`"
+              class="md:grid-cols-2 lg:grid-cols-4 gap-x-12"
+            />
           </div>
-        </div>
-      </div>
-
-      <div v-else class="space-y-12">
-        <!-- Accounts Section -->
-        <div class="space-y-6">
-          <h2 class="text-xl font-bold text-gray-900 border-l-4 border-teal pl-4">Accounts</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-12 gap-y-8">
-            <!-- Group: Roles -->
-            <div class="space-y-4" v-if="permissionGroups.roles">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.roles.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.roles.permissions)"
-                    @change="toggleGroup(permissionGroups.roles.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.roles.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Permission Groups -->
-            <div class="space-y-4" v-if="permissionGroups.permissions">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.permissions.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.permissions.permissions)"
-                    @change="toggleGroup(permissionGroups.permissions.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.permissions.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Users -->
-            <div class="space-y-4" v-if="permissionGroups.users">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.users.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.users.permissions)"
-                    @change="toggleGroup(permissionGroups.users.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.users.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Data Section -->
-        <div class="space-y-6 pt-6 border-t border-gray-100">
-          <h2 class="text-xl font-bold text-gray-900 border-l-4 border-teal pl-4">Data</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-12 gap-y-8">
-            <!-- Group: Installations -->
-            <div class="space-y-4" v-if="permissionGroups.installations">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.installations.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.installations.permissions)"
-                    @change="toggleGroup(permissionGroups.installations.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.installations.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Email Templates -->
-            <div class="space-y-4" v-if="permissionGroups.email_templates">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.email_templates.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.email_templates.permissions)"
-                    @change="toggleGroup(permissionGroups.email_templates.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.email_templates.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Apps -->
-            <div class="space-y-4" v-if="permissionGroups.apps">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.apps.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.apps.permissions)"
-                    @change="toggleGroup(permissionGroups.apps.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.apps.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Pricing Plans -->
-            <div class="space-y-4" v-if="permissionGroups.pricing_plans">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.pricing_plans.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.pricing_plans.permissions)"
-                    @change="toggleGroup(permissionGroups.pricing_plans.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label 
-                  v-for="perm in permissionGroups.pricing_plans.permissions" 
-                  :key="perm.id" 
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input 
-                    type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Integrations -->
-            <div class="space-y-4" v-if="permissionGroups.integrations">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.integrations.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.integrations.permissions)"
-                    @change="toggleGroup(permissionGroups.integrations.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label
-                  v-for="perm in permissionGroups.integrations.permissions"
-                  :key="perm.id"
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Group: Features -->
-            <div class="space-y-4" v-if="permissionGroups.features">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.features.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.features.permissions)"
-                    @change="toggleGroup(permissionGroups.features.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label
-                  v-for="perm in permissionGroups.features.permissions"
-                  :key="perm.id"
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Permissions: SMTP Setup -->
-            <div class="space-y-4" v-if="permissionGroups.smtp">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.smtp.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.smtp.permissions)"
-                    @change="toggleGroup(permissionGroups.smtp.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label
-                  v-for="perm in permissionGroups.smtp.permissions"
-                  :key="perm.id"
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-            <!-- Group: SES Tenants -->
-            <div class="space-y-4" v-if="permissionGroups.ses_tenants">
-              <h3 class="text-sm font-bold text-gray-900 mb-4">{{ permissionGroups.ses_tenants.title }}</h3>
-              <div class="space-y-3">
-                <label class="flex items-center group cursor-pointer">
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal focus:ring-offset-0 cursor-pointer"
-                    :checked="isGroupSelected(permissionGroups.ses_tenants.permissions)"
-                    @change="toggleGroup(permissionGroups.ses_tenants.permissions)"
-                  >
-                  <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-teal transition-colors">Select All</span>
-                </label>
-                <label
-                  v-for="perm in permissionGroups.ses_tenants.permissions"
-                  :key="perm.id"
-                  class="flex items-center group cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal cursor-pointer"
-                    :checked="isPermissionSelected(perm.id)"
-                    @change="togglePermission(perm.id)"
-                  >
-                  <span class="ml-3 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">{{ perm.name }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
+        </CardContent>
 
         <!-- Save Button Bar -->
-        <div class="flex justify-end pt-8 border-t border-gray-100">
-          <button 
+        <CardFooter class="justify-end border-t mt-6 px-8 pt-8">
+          <Button
             v-if="authStore.hasPermission('permissions.edit')"
+            size="lg"
             @click="savePermissions"
             :disabled="saving || !selectedRoleId || !hasChanges"
-            class="bg-teal text-white px-8 py-2.5 rounded-lg font-bold hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
           >
-            <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
+            <Spinner v-if="saving" />
             {{ saving ? 'Saving Changes...' : 'Save Permissions' }}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </CardFooter>
+      </template>
+    </Card>
 
     <!-- Add Permission Modal -->
-    <div v-if="showPermissionModal" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showPermissionModal = false"></div>
+    <Dialog v-model:open="showPermissionModal">
+      <DialogContent class="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add New Permission</DialogTitle>
+        </DialogHeader>
 
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-lg w-full max-h-[90vh] overflow-y-auto">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
-            <h3 class="text-lg font-bold text-gray-900">Add New Permission</h3>
-            <button @click="showPermissionModal = false" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
-              <CloseIcon size="lg" />
-            </button>
-          </div>
-
-          <form @submit.prevent="handleCreatePermission" class="p-6 space-y-5">
-            <div class="space-y-1.5">
-              <label for="permName" class="block text-sm font-bold text-gray-700 cursor-pointer">Permission Name</label>
-              <input
+        <form @submit.prevent="handleCreatePermission" class="space-y-7">
+          <FieldGroup class="gap-5">
+            <Field>
+              <FieldLabel for="permName">Permission Name</FieldLabel>
+              <Input
                 id="permName"
                 name="name"
                 v-model="newPermission.name"
                 type="text"
                 required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400"
                 placeholder="e.g. View Reports"
               />
-            </div>
+            </Field>
 
-            <div class="space-y-1.5">
-              <label for="permSlug" class="block text-sm font-bold text-gray-700 cursor-pointer">Permission Slug</label>
-              <input
+            <Field>
+              <FieldLabel for="permSlug">Permission Slug</FieldLabel>
+              <Input
                 id="permSlug"
                 name="slug"
                 v-model="newPermission.slug"
                 type="text"
                 required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400"
                 placeholder="e.g. reports.view"
               />
-              <p class="text-[10px] text-gray-400">Use dot notation: module.action (e.g. users.edit)</p>
-            </div>
+              <FieldDescription class="text-xs">Use dot notation: module.action (e.g. users.edit)</FieldDescription>
+            </Field>
 
-            <div class="space-y-1.5">
-              <label for="permDescription" class="block text-sm font-bold text-gray-700 cursor-pointer">Description</label>
-              <textarea
+            <Field>
+              <FieldLabel for="permDescription">Description</FieldLabel>
+              <Textarea
                 id="permDescription"
                 name="description"
                 v-model="newPermission.description"
                 rows="3"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400 resize-none"
+                class="resize-none"
                 placeholder="What does this permission allow?"
-              ></textarea>
-            </div>
+              />
+            </Field>
+          </FieldGroup>
 
-            <div class="pt-2 flex justify-end gap-3">
-              <button 
-                type="button"
-                @click="showPermissionModal = false" 
-                class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="isCreatingPermission || !newPermission.name || !newPermission.slug"
-                class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <LoadingIcon v-if="isCreatingPermission" size="sm" color-class="text-white" />
-                {{ isCreatingPermission ? 'Creating...' : 'Create Permission' }}
-              </button>
-            </div>
-          </form>
-        </div>
-    </div>
+          <DialogFooter class="gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              class="flex-1"
+              @click="showPermissionModal = false"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              :disabled="isCreatingPermission || !newPermission.name || !newPermission.slug"
+              class="flex-1"
+            >
+              <Spinner v-if="isCreatingPermission" />
+              {{ isCreatingPermission ? 'Creating...' : 'Create Permission' }}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

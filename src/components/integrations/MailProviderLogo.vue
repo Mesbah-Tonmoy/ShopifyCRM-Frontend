@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Mail } from '@lucide/vue';
+
 defineProps<{ providerKey: string; size?: number }>();
 </script>
 
@@ -19,8 +21,5 @@ defineProps<{ providerKey: string; size?: number }>();
     <path d="M6 9.5C6 8.67 6.67 8 7.5 8h13c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5h-13C6.67 20 6 19.33 6 18.5v-9Z" stroke="#fff" stroke-width="1.6"/>
     <path d="m6.6 9 7.4 5.6L21.4 9" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
   </svg>
-  <svg v-else :width="size ?? 28" :height="size ?? 28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="text-gray-400" aria-hidden="true">
-    <rect x="3" y="5" width="18" height="14" rx="2"/>
-    <path d="m3.5 6 8.5 6.5L20.5 6"/>
-  </svg>
+  <Mail v-else :size="size ?? 28" :stroke-width="1.6" class="text-muted-foreground" aria-hidden="true" />
 </template>

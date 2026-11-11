@@ -37,6 +37,7 @@ export interface App {
   updated_at: string;
   installations_count?: number;
   active_installations_count?: number;
+  pricing_plans_count?: number;
 }
 
 export interface Installation {
@@ -63,7 +64,7 @@ export interface PaginatedResponse<T> {
   current_page: number;
   data: T[];
   first_page_url: string;
-  from: number;
+  from: number | null;
   last_page: number;
   last_page_url: string;
   links: Array<{
@@ -75,7 +76,7 @@ export interface PaginatedResponse<T> {
   path: string;
   per_page: number;
   prev_page_url: string | null;
-  to: number;
+  to: number | null;
   total: number;
 }
 

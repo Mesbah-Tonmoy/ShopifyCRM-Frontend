@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiService } from '@/config/api';
+import { errorMessage } from '@/utils/errors';
 
 interface DashboardStats {
     total_apps: number;
@@ -19,6 +20,12 @@ interface RecentActivityItem {
     store_name: string;
     is_active: boolean;
     created_at: string;
+}
+
+interface DashboardStatsResponse {
+    stats: DashboardStats;
+    chart_data: ChartDataset[];
+    recent_activity: RecentActivityItem[];
 }
 
 interface DashboardState {
@@ -43,14 +50,14 @@ export const useDashboardStore = defineStore('dashboard', {
             this.loading = true;
             this.error = null;
             try {
-                const response = await apiService.get<any>('/dashboard/stats');
+                const response = await apiService.get<DashboardStatsResponse>('/dashboard/stats');
                 if (response.success) {
                     this.stats = response.data.stats;
                     this.chartData = response.data.chart_data;
                     this.recentActivity = response.data.recent_activity;
                 }
-            } catch (error: any) {
-                this.error = error.message || 'Failed to fetch dashboard stats';
+            } catch (error) {
+                this.error = errorMessage(error, 'Failed to fetch dashboard stats');
             } finally {
                 this.loading = false;
             }

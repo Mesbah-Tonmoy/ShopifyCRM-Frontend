@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import Swal from 'sweetalert2';
-import { pricingPlanService, type PricingPlan } from '@/services/pricingPlanService';
+import { pricingPlanService, type PricingPlan, type PricingPlanFilters } from '@/services/pricingPlanService';
 import { useAuthStore } from '@/stores/auth';
 import { useAppsStore } from '@/stores/apps';
-import { Toast } from '@/utils/toast';
-import { EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
+import { Pencil, RefreshCw } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import { errorMessage } from '@/utils/errors';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -45,7 +54,7 @@ const fetchPlans = async () => {
     loading.value = true;
     error.value = null;
     
-    const filters: any = {
+    const filters: PricingPlanFilters = {
       per_page: 100 // Get more for client-side search to work better
     };
     if (selectedAppId.value !== null) filters.app_id = selectedAppId.value;
@@ -55,9 +64,9 @@ const fetchPlans = async () => {
     if (response.success) {
       plans.value = response.data.data;
     }
-  } catch (err: any) {
-    const errorMessage = err.message || 'Failed to load pricing plans';
-    error.value = errorMessage;
+  } catch (err) {
+    const message = errorMessage(err, 'Failed to load pricing plans');
+    error.value = message;
     console.error('Error fetching plans:', err);
   } finally {
     loading.value = false;
@@ -91,8 +100,15 @@ const filteredPlans = computed(() => {
 });
 
 const appsWithPlans = computed(() => {
-  return appsStore.apps.filter(app => (app as any).pricing_plans_count > 0);
+  return appsStore.apps.filter(app => (app.pricing_plans_count ?? 0) > 0);
 });
+
+const appOptions = computed(() => appsWithPlans.value.map((app) => ({ value: app.id, label: app.app_name })));
+
+const statusOptions = [
+  { value: true, label: 'Active' },
+  { value: false, label: 'Inactive' },
+];
 
 const openEditModal = (plan: PricingPlan) => {
   editingPlan.value = { ...plan };
@@ -100,8 +116,9 @@ const openEditModal = (plan: PricingPlan) => {
 };
 
 const closeEditModal = () => {
+  // editingPlan is left in place so the dialog keeps its content while it animates out;
+  // opening always loads a fresh copy.
   showEditModal.value = false;
-  editingPlan.value = null;
 };
 
 const savePlan = async () => {
@@ -118,18 +135,11 @@ const savePlan = async () => {
     if (response.success) {
       await fetchPlans();
       closeEditModal();
-      Toast.fire({
-        icon: 'success',
-        title: 'Pricing plan updated successfully'
-      });
+      toast.success('Pricing plan updated successfully');
     }
-  } catch (err: any) {
-    const errorMessage = err.message || 'Failed to update plan';
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: errorMessage
-    });
+  } catch (err) {
+    const message = errorMessage(err, 'Failed to update plan');
+    toast.error('Error', { description: message });
   } finally {
     saving.value = false;
   }
@@ -141,18 +151,10 @@ const toggleActive = async (plan: PricingPlan) => {
     if (response.success) {
       plan.is_active = !plan.is_active;
       
-      Toast.fire({
-        icon: 'success',
-        title: 'Status Updated',
-        text: `Plan is now ${plan.is_active ? 'active' : 'inactive'}`
-      });
+      toast.success('Status Updated', { description: `Plan is now ${plan.is_active ? 'active' : 'inactive'}` });
     }
-  } catch (err: any) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: err.message || 'Failed to toggle status'
-    });
+  } catch (err) {
+    toast.error('Error', { description: errorMessage(err, 'Failed to toggle status') });
   }
 };
 
@@ -162,46 +164,28 @@ const goToFeatures = (planId: number) => {
 
 const handleSyncPlans = async () => {
   if (!selectedAppId.value) {
-    Swal.fire({
-      icon: 'warning',
-      title: 'No App Selected',
-      text: 'Please select an app first to sync its pricing plans.'
-    });
+    toast.warning('No App Selected', { description: 'Please select an app first to sync its pricing plans.' });
     return;
   }
 
   const app = appsStore.apps.find(a => a.id === selectedAppId.value);
   
-  const result = await Swal.fire({
+  const { confirmed } = await confirmDialog({
     title: 'Sync Pricing Plans?',
-    text: `This will push the current pricing plans and features to ${app?.app_name}. Proceed?`,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonColor: '#008080',
-    cancelButtonColor: '#6B7280',
-    confirmButtonText: 'Yes, sync them!'
+    description: `This will push the current pricing plans and features to ${app?.app_name}. Proceed?`,
+    confirmText: 'Yes, sync them!'
   });
 
-  if (result.isConfirmed) {
+  if (confirmed) {
     try {
       syncing.value = true;
       const response = await pricingPlanService.syncPlans(selectedAppId.value);
       
       if (response.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Synced!',
-          text: 'Pricing plans have been pushed to the app successfully.',
-          timer: 2000,
-          showConfirmButton: false
-        });
+        toast.success('Synced!', { description: 'Pricing plans have been pushed to the app successfully.' });
       }
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sync Failed',
-        text: err.response?.data?.message || err.message || 'Failed to sync plans'
-      });
+    } catch (err) {
+      toast.error('Sync Failed', { description: errorMessage(err, 'Failed to sync plans') });
     } finally {
       syncing.value = false;
     }
@@ -213,23 +197,20 @@ const handleSyncPlans = async () => {
   <div>
     <PageHeader title="Pricing Plans" description="Manage your pricing plans and features">
       <template #actions>
-        <button
+        <Button
           @click="handleSyncPlans"
           :disabled="syncing || !selectedAppId || !authStore.hasPermission('pricing_plans.edit')"
-          class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all flex items-center gap-2 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <LoadingIcon v-if="syncing" size="xs" color-class="text-white" />
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <Spinner v-if="syncing" />
+          <RefreshCw v-else />
           {{ syncing ? 'Syncing...' : 'Sync Plans' }}
-        </button>
+        </Button>
       </template>
     </PageHeader>
 
     <!-- Filter/Search Bar -->
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-4">
+    <Card class="mb-6 py-4">
+      <CardContent class="flex flex-wrap items-center gap-4 px-4">
         <!-- Search Field -->
         <SearchInput 
           v-model="searchQuery" 
@@ -242,191 +223,156 @@ const handleSyncPlans = async () => {
           <!-- App Filter -->
           <SelectInput
             v-model="selectedAppId"
+            :options="appOptions"
             label="App"
             placeholder="Select App"
             select-class="w-48"
-          >
-            <option v-for="app in appsWithPlans" :key="app.id" :value="app.id">
-              {{ app.app_name }}
-            </option>
-          </SelectInput>
+          />
 
           <!-- Status Filter -->
           <SelectInput
             v-model="selectedStatus"
+            :options="statusOptions"
             label="Status"
             placeholder="Select Status"
             select-class="w-48"
-          >
-            <option :value="true">Active</option>
-            <option :value="false">Inactive</option>
-          </SelectInput>
+          />
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
 
     <!-- Content Area -->
-    <div class="bg-white rounded-lg border border-gray-200">
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">App Name</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Plan Name</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Amount</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Interval</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <template v-if="loading">
-              <tr v-for="i in 5" :key="i">
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="120px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm"><SkeletonLoader width="24px" height="24px" /></td>
-              </tr>
-            </template>
-            <tr v-else-if="filteredPlans.length === 0">
-              <td colspan="6" class="py-20 text-center text-gray-400">
-                <p class="text-sm italic">No pricing plans found</p>
-              </td>
-            </tr>
-            <template v-else>
-              <tr 
-                v-for="plan in filteredPlans" 
-                :key="plan.id" 
-                class="hover:bg-gray-50/50 transition-colors cursor-pointer"
-                @click="goToFeatures(plan.id)"
-              >
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm font-medium text-gray-900">{{ plan.app?.app_name }}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm text-gray-900 font-medium">{{ plan.name || plan.display_name }}</div>
-                  <div v-if="plan.name && plan.name !== plan.display_name" class="text-xs text-gray-500 font-mono">{{ plan.display_name }}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm text-gray-900">{{ plan.amount }} {{ plan.currency_code }}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm text-gray-900 capitalize">{{ plan.interval }}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap" @click.stop>
-                   <button
-                    @click="toggleActive(plan)"
-                    :disabled="!authStore.hasPermission('pricing_plans.edit')"
-                    :class="[
-                      'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
-                      plan.is_active ? 'bg-teal' : 'bg-gray-200'
-                    ]"
+    <Card class="gap-0 overflow-hidden py-0">
+      <Table>
+        <TableHeader class="bg-muted/50">
+          <TableRow>
+            <TableHead class="px-6">App Name</TableHead>
+            <TableHead class="px-6">Plan Name</TableHead>
+            <TableHead class="px-6">Amount</TableHead>
+            <TableHead class="px-6">Interval</TableHead>
+            <TableHead class="px-6">Status</TableHead>
+            <TableHead class="px-6">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-if="loading">
+            <TableRow v-for="i in 5" :key="i">
+              <TableCell class="px-6 py-4"><SkeletonLoader width="120px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="100px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="80px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="80px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="24px" height="24px" /></TableCell>
+            </TableRow>
+          </template>
+          <TableEmpty v-else-if="filteredPlans.length === 0" :colspan="6" class="py-10 text-muted-foreground">
+            <p class="text-sm italic">No pricing plans found</p>
+          </TableEmpty>
+          <template v-else>
+            <TableRow 
+              v-for="plan in filteredPlans" 
+              :key="plan.id" 
+              class="cursor-pointer"
+              @click="goToFeatures(plan.id)"
+            >
+              <TableCell class="px-6 py-4">
+                <div class="text-sm font-medium text-foreground">{{ plan.app?.app_name }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="text-sm text-foreground font-medium">{{ plan.name || plan.display_name }}</div>
+                <div v-if="plan.name && plan.name !== plan.display_name" class="text-xs text-muted-foreground font-mono">{{ plan.display_name }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="text-sm text-foreground">{{ plan.amount }} {{ plan.currency_code }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="text-sm text-foreground capitalize">{{ plan.interval }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4" @click.stop>
+                <Switch
+                  :model-value="plan.is_active"
+                  :disabled="!authStore.hasPermission('pricing_plans.edit')"
+                  :aria-label="`${plan.is_active ? 'Deactivate' : 'Activate'} ${plan.name || plan.display_name}`"
+                  @update:model-value="toggleActive(plan)"
+                />
+              </TableCell>
+              <TableCell class="px-6 py-4" @click.stop>
+                <div class="flex items-center gap-3">
+                  <Button
+                    v-if="authStore.hasPermission('pricing_plans.edit')"
+                    variant="ghost"
+                    size="icon-sm"
+                    @click="openEditModal(plan)"
+                    title="Edit"
+                    aria-label="Edit"
                   >
-                    <span :class="[
-                      'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out',
-                      plan.is_active ? 'translate-x-4' : 'translate-x-0'
-                    ]" />
-                  </button>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>
-                  <div class="flex items-center gap-3">
-                    <button
-                      v-if="authStore.hasPermission('pricing_plans.edit')"
-                      @click="openEditModal(plan)"
-                      class="text-teal hover:text-teal-dark transition-colors"
-                      title="Edit"
-                    >
-                      <EditIcon class="w-5 h-5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
+                    <Pencil />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </template>
+        </TableBody>
+      </Table>
+    </Card>
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal && editingPlan" class="fixed inset-0 z-50 overflow-y-auto">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="fixed inset-0 bg-dark/20 backdrop-blur-sm transition-opacity" @click="closeEditModal"></div>
+    <Dialog :open="showEditModal && !!editingPlan" @update:open="(open) => { if (!open) closeEditModal(); }">
+      <DialogContent class="sm:max-w-lg">
+        <template v-if="editingPlan">
+          <DialogHeader>
+            <DialogTitle>Edit Pricing Plan</DialogTitle>
+            <DialogDescription>{{ editingPlan.app?.app_name }} • {{ editingPlan.name }}</DialogDescription>
+          </DialogHeader>
 
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-lg w-full overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-            <div>
-              <h3 class="text-lg font-bold text-gray-900">Edit Pricing Plan</h3>
-              <p class="text-xs text-gray-500 mt-0.5">{{ editingPlan.app?.app_name }} • {{ editingPlan.name }}</p>
-            </div>
-            <button @click="closeEditModal" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer p-1">
-              <CloseIcon class="w-6 h-6" />
-            </button>
-          </div>
-
-          <div class="p-6 space-y-5">
+          <FieldGroup>
             <!-- Active Toggle -->
-            <div class="flex items-center justify-between p-4 bg-teal/5 rounded-xl border border-teal/10">
-              <div>
-                <label class="text-sm font-bold text-gray-900">Plan Status</label>
-                <p class="text-xs text-gray-500">Enable or disable this pricing plan</p>
-              </div>
-              <button
-                @click="editingPlan.is_active = !editingPlan.is_active"
-                :class="[
-                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
-                  editingPlan.is_active ? 'bg-teal' : 'bg-gray-200'
-                ]"
-              >
-                <span :class="[
-                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out',
-                  editingPlan.is_active ? 'translate-x-5' : 'translate-x-0'
-                ]" />
-              </button>
-            </div>
+            <Field orientation="horizontal" class="rounded-xl border bg-muted/50 p-4">
+              <FieldContent>
+                <FieldLabel for="plan-status">Plan Status</FieldLabel>
+                <FieldDescription>Enable or disable this pricing plan</FieldDescription>
+              </FieldContent>
+              <Switch id="plan-status" v-model="editingPlan.is_active" />
+            </Field>
 
             <!-- Name Field -->
-            <div class="space-y-1.5">
-              <label for="display_name" class="block text-sm font-bold text-gray-700">Display Name</label>
-              <input
+            <Field>
+              <FieldLabel for="display_name">Display Name</FieldLabel>
+              <Input
                 id="display_name"
                 v-model="editingPlan.display_name"
                 type="text"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all"
                 placeholder="Enter plan name"
               />
-            </div>
+            </Field>
 
             <!-- Amount Field -->
-            <div class="space-y-1.5">
-              <label for="amount" class="block text-sm font-bold text-gray-700">Amount ({{ editingPlan.currency_code }})</label>
-              <input
+            <Field>
+              <FieldLabel for="amount">Amount ({{ editingPlan.currency_code }})</FieldLabel>
+              <Input
                 id="amount"
                 v-model.number="editingPlan.amount"
                 type="number"
                 step="0.01"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all"
                 placeholder="0.00"
               />
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
 
-          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-            <button @click="closeEditModal" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-all">
+          <DialogFooter class="gap-3">
+            <Button variant="outline" @click="closeEditModal">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               @click="savePlan"
               :disabled="saving"
-              class="px-6 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
+              <Spinner v-if="saving" />
               {{ saving ? 'Saving...' : 'Save Changes' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Button>
+          </DialogFooter>
+        </template>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

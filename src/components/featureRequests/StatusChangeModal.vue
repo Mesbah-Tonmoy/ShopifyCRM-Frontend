@@ -1,63 +1,57 @@
 <template>
-  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-dark/40 p-4" @click.self="close">
-    <div class="w-full max-w-lg rounded-lg bg-white shadow-xl">
-      <div class="flex items-start justify-between border-b border-lighter px-5 py-4">
-        <div>
-          <h2 class="text-h4 font-semibold text-dark">Move to {{ targetLabel }}</h2>
-          <p class="mt-0.5 text-b5 text-mid line-clamp-1">{{ request?.title }}</p>
-        </div>
-        <button class="text-light hover:text-dark" aria-label="Close" @click="close">
-          <CloseIcon class="h-5 w-5" />
-        </button>
-      </div>
+  <Dialog :open="open" @update:open="(value) => { if (!value) close(); }">
+    <DialogContent class="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Move to {{ targetLabel }}</DialogTitle>
+        <DialogDescription class="line-clamp-1">{{ request?.title }}</DialogDescription>
+      </DialogHeader>
 
-      <div class="space-y-4 px-5 py-4">
-        <div>
-          <label for="status-note" class="mb-1.5 block text-b6 font-semibold tracking-wide text-light uppercase">
-            Public response
-          </label>
-          <textarea
+      <FieldGroup>
+        <Field>
+          <FieldLabel for="status-note">Public response</FieldLabel>
+          <Textarea
             id="status-note"
             v-model="note"
             rows="3"
             maxlength="2000"
-            class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
             :placeholder="notePlaceholder"
-          ></textarea>
-          <p class="mt-1 text-b6 text-light">Shown to merchants on the board. Leave blank to keep the current note.</p>
-        </div>
+          />
+          <FieldDescription>Shown to merchants on the board. Leave blank to keep the current note.</FieldDescription>
+        </Field>
 
-        <label class="flex items-start gap-2.5">
-          <input v-model="notify" type="checkbox" class="mt-1.5 h-4 w-4 accent-primary" />
-          <span class="text-b4 text-mid">
-            Email the stores that asked for this
-            <span class="block text-b6 text-light">
-              {{ notifyHint }}
-            </span>
-          </span>
-        </label>
-      </div>
+        <Field orientation="horizontal">
+          <Checkbox id="status-notify" v-model="notify" />
+          <FieldContent>
+            <FieldLabel for="status-notify">Email the stores that asked for this</FieldLabel>
+            <FieldDescription>{{ notifyHint }}</FieldDescription>
+          </FieldContent>
+        </Field>
+      </FieldGroup>
 
-      <div class="flex justify-end gap-2 border-t border-lighter px-5 py-3">
-        <button class="rounded-sm border border-grey px-4 py-2 text-b4 font-semibold text-mid hover:bg-lighter" @click="close">
+      <DialogFooter>
+        <Button variant="outline" @click="close">
           Cancel
-        </button>
-        <button
-          class="flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-b4 font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+        </Button>
+        <Button
           :disabled="saving"
           @click="submit"
         >
-          <LoadingIcon v-if="saving" class="h-4 w-4 animate-spin" />
+          <Spinner v-if="saving" />
           Move to {{ targetLabel }}
-        </button>
-      </div>
-    </div>
-  </div>
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { CloseIcon, LoadingIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import {
   FEATURE_REQUEST_STATUSES,
   type FeatureRequest,

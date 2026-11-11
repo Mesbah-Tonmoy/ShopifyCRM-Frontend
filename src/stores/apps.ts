@@ -1,11 +1,13 @@
 // src/stores/apps.ts
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { apiService } from '@/config/api';
 import type { App, PaginatedResponse, AppStats } from '@/types';
 
 export const useAppsStore = defineStore('apps', () => {
   const apps = ref<App[]>([]);
+  /** The apps as SelectInput options. */
+  const appOptions = computed(() => apps.value.map((app) => ({ value: app.id, label: app.app_name })));
   const currentApp = ref<App | null>(null);
   const appStats = ref<AppStats | null>(null);
   const pagination = ref<Omit<PaginatedResponse<App>, 'data'> | null>(null);
@@ -142,6 +144,7 @@ export const useAppsStore = defineStore('apps', () => {
 
   return {
     apps,
+    appOptions,
     currentApp,
     appStats,
     pagination,

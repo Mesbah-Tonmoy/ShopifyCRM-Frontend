@@ -1,34 +1,47 @@
 <template>
-  <div class="relative" :class="containerClass">
-    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-      <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-      </svg>
-    </div>
-    <input
+  <InputGroup :class="containerClass">
+    <InputGroupAddon>
+      <SearchIcon />
+    </InputGroupAddon>
+    <InputGroupInput
       :id="inputId"
-      :name="inputId"
+      :name="name || inputId"
       v-model="internalValue"
       type="text"
       :placeholder="placeholder"
       :aria-label="placeholder || 'Search'"
-      class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal transition-all"
+      @keyup.enter="emit('search')"
     />
-  </div>
+    <InputGroupAddon v-if="clearable && internalValue" align="inline-end">
+      <InputGroupButton size="icon-xs" title="Clear search" aria-label="Clear search" @click="clear">
+        <X />
+      </InputGroupButton>
+    </InputGroupAddon>
+  </InputGroup>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { SearchIcon, X } from '@lucide/vue';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 
 interface Props {
   modelValue: string;
   id?: string;
+  name?: string;
   placeholder?: string;
   containerClass?: string;
+  /** Show an × that empties the field and emits `clear`. */
+  clearable?: boolean;
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void;
+  /** Enter pressed in the field. */
+  (e: 'search'): void;
+  (e: 'clear'): void;
+}>();
 
 // Generate a unique fallback ID if none provided
 const inputId = props.id || `search-${Math.random().toString(36).substr(2, 9)}`;
@@ -37,4 +50,9 @@ const internalValue = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
 });
+
+const clear = () => {
+  emit('update:modelValue', '');
+  emit('clear');
+};
 </script>

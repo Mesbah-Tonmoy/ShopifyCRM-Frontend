@@ -3,16 +3,43 @@ import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useInstallationsStore } from '@/stores/installations.ts';
 import { useAuthStore } from '@/stores/auth';
-import { SortIcon, ChevronDown, ExternalLinkIcon } from '@/components/icons';
-import { VueDatePicker } from '@vuepic/vue-datepicker';
-import '@vuepic/vue-datepicker/dist/main.css';
+import {
+  ArrowDown,
+  ArrowLeftRight,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  Download,
+  ExternalLink,
+  List,
+  ShoppingBag,
+} from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Empty, EmptyDescription } from '@/components/ui/empty';
+import { Input } from '@/components/ui/input';
+import SearchInput from '@/components/common/SearchInput.vue';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toQuery } from '@/utils/query';
+import DateRangePicker, { toDateFilter, type DateFilter } from '@/components/common/DateRangePicker.vue';
 import dayjs from 'dayjs';
-import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths } from 'date-fns';
 import { saveBlob } from '@/utils/export';
 import { apiService } from '@/config/api';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
+import type { Tone } from '@/lib/tones';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import AppPagination from '@/components/common/AppPagination.vue';
+import AppAlert from '@/components/common/AppAlert.vue';
+import StatusBadge from '@/components/common/StatusBadge.vue';
+import { toggleInList } from '@/lib/list';
 
 const installationsStore = useInstallationsStore();
 const authStore = useAuthStore();
@@ -44,9 +71,8 @@ const openSections = ref({
   installCount: true,
 });
 
-const toggleSection = (section: keyof typeof openSections.value) => {
-  openSections.value[section] = !openSections.value[section];
-};
+/** Reads an install-count box; a cleared box means no bound. */
+const toCount = (value: string | number): number | null => (value === '' ? null : Number(value));
 
 // Options from Store
 const appPlanOptions = computed(() => 
@@ -82,20 +108,11 @@ const statusOptions = [
  */
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
-// Handle date range changes
-const handleDateChange = (newDate: Date[] | null) => {
-  if (newDate && newDate.length === 2 && newDate[0] && newDate[1]) {
-    // Both dates selected - fetch data
-    dateFrom.value = dayjs(newDate[0]).format('YYYY-MM-DD');
-    dateTo.value = dayjs(newDate[1]).format('YYYY-MM-DD');
-    applyFilters();
-  } else if (!newDate || newDate.length === 0) {
-    // Dates cleared - fetch all data
-    dateFrom.value = '';
-    dateTo.value = '';
-    applyFilters();
-  }
-  // Don't fetch when only one date is selected (length === 1)
+// A full range was picked or the field was cleared
+const handleDateChange = (range: DateFilter) => {
+  dateFrom.value = range.from;
+  dateTo.value = range.to;
+  applyFilters();
 };
 
 onMounted(() => {
@@ -114,32 +131,6 @@ watch(appId, () => {
 
 // Watch for per page changes and refetch
 watch(perPage, () => applyFilters());
-
-const dateRangePlaceholderText = computed(() => {
-  const firstDay = dayjs().startOf('month');
-  const lastDay = dayjs().endOf('month');
-
-  const formattedFirstDay = firstDay.format('MMM DD, YYYY');
-  const formattedLastDay = lastDay.format('MMM DD, YYYY');
-
-  return `${formattedFirstDay} - ${formattedLastDay}`
-});
-
-const presetDates = ref([
-  {
-    label: 'Today (Slot)',
-    value: [new Date(), new Date()],
-    slot: 'preset-date-range-button'
-  },
-  { label: 'Today', value: [new Date(), new Date()] },
-  { label: 'Last 7 Days', value: [subDays(new Date(), 7), new Date()] },
-  { label: 'This Month', value: [startOfMonth(new Date()), endOfMonth(new Date())] },
-  {
-    label: 'Last Month',
-    value: [startOfMonth(subMonths(new Date(), 1)), endOfMonth(subMonths(new Date(), 1))],
-  },
-  { label: 'This Year', value: [startOfYear(new Date()), endOfYear(new Date())] },
-]);
 
 const setDateRange = (direction: 'previous' | 'next') => {
     const currentRange = date.value;
@@ -162,7 +153,8 @@ const setDateRange = (direction: 'previous' | 'next') => {
         ]
     }
     
-    handleDateChange(date.value);
+    const range = toDateFilter(date.value);
+    if (range) handleDateChange(range);
 }
 
 /**
@@ -186,7 +178,7 @@ const currentFilters = () => ({
   plan_name: selectedPlans.value.length ? selectedPlans.value : undefined,
   shopify_plans: selectedShopifyPlans.value.length ? selectedShopifyPlans.value : undefined,
   is_active: selectedStatuses.value.length === 1 ? selectedStatuses.value[0] : undefined,
-  // v-model.number leaves '' behind when a box is cleared
+  // a cleared box is null (see toCount)
   install_count_min: typeof installCountMin.value === 'number' ? installCountMin.value : undefined,
   install_count_max: typeof installCountMax.value === 'number' ? installCountMax.value : undefined,
   app_id: appId.value,
@@ -242,43 +234,39 @@ const exporting = ref(false);
  */
 const handleExport = async () => {
   if ((installationsStore.pagination?.total ?? 0) === 0) {
-    Toast.fire({ icon: 'info', title: 'Nothing to export for these filters' });
+    toast.info('Nothing to export for these filters');
     return;
   }
 
   exporting.value = true;
 
   try {
-    const params = new URLSearchParams();
-
-    Object.entries(currentFilters()).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-
-      if (Array.isArray(value)) {
-        value.forEach((entry) => params.append(`${key}[]`, String(entry)));
-      } else {
-        params.append(key, String(value));
-      }
-    });
-
     const fallback = `installations_export_${dayjs().format('YYYY-MM-DD')}.csv`;
     const { blob, filename } = await apiService.download(
-      `/installations/export?${params.toString()}`,
+      `/installations/export${toQuery(currentFilters())}`,
       fallback
     );
 
     saveBlob(blob, filename);
 
-    Toast.fire({
-      icon: 'success',
-      title: `Exported ${(installationsStore.pagination?.total ?? 0).toLocaleString()} installations`,
-    });
+    toast.success(`Exported ${(installationsStore.pagination?.total ?? 0).toLocaleString()} installations`);
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Export failed' });
+    toast.error((err as Error).message || 'Export failed');
   } finally {
     exporting.value = false;
   }
 };
+
+// Sortable table columns; the App column only shows across all apps
+const columns = computed(() => [
+  ...(appId.value ? [] : [{ key: 'app_name', label: 'App' }]),
+  { key: 'store_name', label: 'Store' },
+  { key: 'email', label: 'Email' },
+  { key: 'app_plan', label: 'Plan' },
+  { key: 'shopify_plan', label: 'Shopify Plan' },
+  { key: 'is_active', label: 'Status' },
+  { key: 'installed_at', label: 'Installed' },
+]);
 
 // No client-side sorting needed - handled by server
 const paginatedInstallations = computed(() => {
@@ -292,15 +280,6 @@ const totalPages = computed(() => {
   return installationsStore.pagination.last_page || 1;
 });
 
-const paginationInfo = computed(() => {
-  if (!installationsStore.pagination) return 'Showing 0 installations';
-  
-  const { from, to, total } = installationsStore.pagination;
-  if (total === 0) return 'Showing 0 installations';
-  
-  return `Showing ${from} to ${to} of ${total} installations`;
-});
-
 const goToPage = (page: number) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page;
@@ -308,47 +287,8 @@ const goToPage = (page: number) => {
   }
 };
 
-const visiblePages = computed(() => {
-  const pages = [];
-  const total = totalPages.value;
-  const current = currentPage.value;
-  
-  if (total <= 7) {
-    // Show all pages if total is 7 or less
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    // Always show first page
-    pages.push(1);
-    
-    if (current > 3) {
-      pages.push('...');
-    }
-    
-    // Show pages around current page
-    const start = Math.max(2, current - 1);
-    const end = Math.min(total - 1, current + 1);
-    
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-    
-    if (current < total - 2) {
-      pages.push('...');
-    }
-    
-    // Always show last page
-    pages.push(total);
-  }
-  
-  return pages;
-});
-
-const getStatusColor = (isActive: boolean) => {
-  return isActive 
-    ? 'bg-green-lighter text-green' 
-    : 'bg-red-100 text-red-800';
+const getStatusTone = (isActive: boolean): Tone => {
+  return isActive ? 'success' : 'danger';
 };
 
 const getStatusText = (isActive: boolean) => {
@@ -365,10 +305,10 @@ const getStatusText = (isActive: boolean) => {
  * Shared by the name badge and the count badge beside it, so the pair always
  * reads as one thing rather than two colours disagreeing.
  */
-const getInstallCountColor = (count: number) => {
-  if (count > 5) return 'bg-red-100 text-red-800';
-  if (count > 1) return 'bg-amber-100 text-amber-800';
-  return 'bg-gray-100 text-gray-800';
+const getInstallCountTone = (count: number): Tone => {
+  if (count > 5) return 'danger';
+  if (count > 1) return 'warning';
+  return 'neutral';
 };
 
 const getInstallCountTitle = (count: number) => {
@@ -429,492 +369,314 @@ const getShopifyPlan = (shopifyPlan: string | null) => {
       <!-- Sidebar Filters -->
       <div class="w-full lg:w-64 flex-shrink-0 space-y-5">
         <!-- Advance Filter -->
-        <div class="p-5 bg-white rounded-lg border border-gray-200">
-          <div class="flex items-center justify-between pb-2 mb-4 border-b border-gray-200">
-             <h3 class="text-lg font-semibold text-gray-900">Advance Filter</h3>
-             <button @click="resetFilters" class="text-sm text-teal hover:text-teal-dark font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-90">Reset</button>
+        <Card class="gap-0 p-5">
+          <div class="mb-4 flex items-center justify-between border-b pb-2">
+            <h3 class="font-heading text-lg font-semibold">Advance Filter</h3>
+            <Button variant="link" class="h-auto p-0" @click="resetFilters">Reset</Button>
           </div>
 
-          <!-- Status Filter -->
-          <div class="mb-4">
-            <button type="button" @click="toggleSection('status')" :aria-expanded="openSections.status" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-               <span class="flex-1 text-left">Status</span>
-               <span v-if="selectedStatuses.length" class="text-xs font-semibold text-teal">{{ selectedStatuses.length }}</span>
-               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.status ? 'rotate-180' : '']" />
-            </button>
-            <div v-show="openSections.status">
-               <label v-for="status in statusOptions" :key="String(status.value)" class="w-full py-[5px] px-[10px] flex items-center text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="status.value" v-model="selectedStatuses" @change="applyFilters" class="h-4 w-4 mr-2 mt-[2px]">
-                 <span class="text-sm">{{ status.label }}</span>
-               </label>
-            </div>
-          </div>
-
-          <!-- App Plan Filter -->
-          <div class="mb-4">
-            <button type="button" @click="toggleSection('plans')" :aria-expanded="openSections.plans" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
-               <i class="icon-list-regular"></i>
-               <span class="flex-1 text-left">Plans</span>
-               <span v-if="selectedPlans.length" class="text-xs font-semibold text-teal">{{ selectedPlans.length }}</span>
-               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.plans ? 'rotate-180' : '']" />
-            </button>
-            <div v-show="openSections.plans">
-               <label v-for="plan in appPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="plan.value" v-model="selectedPlans" @change="applyFilters" class="h-4 w-4 mr-2 mt-[2px]">
-                 <span class="text-sm">{{ plan.label }}</span>
-               </label>
-               <p v-if="appPlanOptions.length === 0" class="py-[5px] px-[10px] text-sm text-gray-400 italic">No plans</p>
-            </div>
-          </div>
-
-          <!-- Shopify Plan Filter -->
-          <div class="mb-4">
-            <button type="button" @click="toggleSection('shopifyPlans')" :aria-expanded="openSections.shopifyPlans" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-1 text-dark font-medium rounded-lg bg-background cursor-pointer">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-               <span class="flex-1 text-left">Shopify Plan</span>
-               <span v-if="selectedShopifyPlans.length" class="text-xs font-semibold text-teal">{{ selectedShopifyPlans.length }}</span>
-               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.shopifyPlans ? 'rotate-180' : '']" />
-            </button>
-            <div v-show="openSections.shopifyPlans">
-               <label v-for="plan in shopifyPlanOptions" :key="plan.value" class="w-full py-[5px] px-[10px] flex text-mid text-b4 transition hover:text-teal cursor-pointer">
-                 <input type="checkbox" :value="plan.value" v-model="selectedShopifyPlans" @change="applyFilters" class="h-4 w-4 mr-2 mt-[3px]">
-                 <span class="text-sm">{{ plan.label }}</span>
-               </label>
-               <p v-if="shopifyPlanOptions.length === 0" class="py-[5px] px-[10px] text-sm text-gray-400 italic">No Shopify plans</p>
-            </div>
-          </div>
-
-           <!-- Install Count Filter -->
-          <div>
-            <button type="button" @click="toggleSection('installCount')" :aria-expanded="openSections.installCount" class="w-full flex items-center gap-x-[10px] px-[10px] py-[5px] mb-[10px] text-dark font-medium rounded-lg bg-background cursor-pointer">
-               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
-               <span class="flex-1 text-left">Install Count</span>
-               <ChevronDown size="sm" :class="['transition-transform duration-200', openSections.installCount ? 'rotate-180' : '']" />
-            </button>
-            <div v-show="openSections.installCount" class="flex items-center gap-2">
-                <input 
-                    type="number" 
-                    name="install_count_min"
-                    placeholder="Min" 
-                    v-model.number="installCountMin" 
-                    @change="applyFilters"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-teal focus:border-teal"
+          <div class="space-y-4">
+            <!-- Status Filter -->
+            <Collapsible v-model:open="openSections.status">
+              <CollapsibleTrigger class="group mb-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-sm font-medium text-foreground">
+                <CircleCheck class="size-4" />
+                <span class="flex-1 text-left">Status</span>
+                <span v-if="selectedStatuses.length" class="text-xs font-semibold text-primary">{{ selectedStatuses.length }}</span>
+                <ChevronDown class="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Label
+                  v-for="status in statusOptions"
+                  :key="String(status.value)"
+                  class="w-full cursor-pointer px-2.5 py-1.5 font-normal text-foreground transition hover:text-primary"
                 >
-                <span class="text-gray-400">-</span>
-                 <input 
-                    type="number" 
-                    name="install_count_max"
-                    placeholder="Max" 
-                    v-model.number="installCountMax" 
-                    @change="applyFilters"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-teal focus:border-teal"
-                >
-            </div>
-          </div>
+                  <Checkbox
+                    :model-value="selectedStatuses.includes(status.value)"
+                    class="mt-1"
+                    @update:model-value="(checked) => { selectedStatuses = toggleInList(selectedStatuses, status.value, checked); applyFilters(); }"
+                  />
+                  {{ status.label }}
+                </Label>
+              </CollapsibleContent>
+            </Collapsible>
 
-        </div>
+            <!-- App Plan Filter -->
+            <Collapsible v-model:open="openSections.plans">
+              <CollapsibleTrigger class="group mb-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-sm font-medium text-foreground">
+                <List class="size-4" />
+                <span class="flex-1 text-left">Plans</span>
+                <span v-if="selectedPlans.length" class="text-xs font-semibold text-primary">{{ selectedPlans.length }}</span>
+                <ChevronDown class="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Label
+                  v-for="plan in appPlanOptions"
+                  :key="plan.value"
+                  class="w-full cursor-pointer px-2.5 py-1.5 font-normal text-foreground transition hover:text-primary"
+                >
+                  <Checkbox
+                    :model-value="selectedPlans.includes(plan.value)"
+                    class="mt-1"
+                    @update:model-value="(checked) => { selectedPlans = toggleInList(selectedPlans, plan.value, checked); applyFilters(); }"
+                  />
+                  {{ plan.label }}
+                </Label>
+                <p v-if="appPlanOptions.length === 0" class="px-2.5 py-1.5 text-sm text-muted-foreground italic">No plans</p>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <!-- Shopify Plan Filter -->
+            <Collapsible v-model:open="openSections.shopifyPlans">
+              <CollapsibleTrigger class="group mb-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-sm font-medium text-foreground">
+                <ShoppingBag class="size-4" />
+                <span class="flex-1 text-left">Shopify Plan</span>
+                <span v-if="selectedShopifyPlans.length" class="text-xs font-semibold text-primary">{{ selectedShopifyPlans.length }}</span>
+                <ChevronDown class="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Label
+                  v-for="plan in shopifyPlanOptions"
+                  :key="plan.value"
+                  class="w-full cursor-pointer px-2.5 py-1.5 font-normal text-foreground transition hover:text-primary"
+                >
+                  <Checkbox
+                    :model-value="selectedShopifyPlans.includes(plan.value)"
+                    class="mt-1"
+                    @update:model-value="(checked) => { selectedShopifyPlans = toggleInList(selectedShopifyPlans, plan.value, checked); applyFilters(); }"
+                  />
+                  {{ plan.label }}
+                </Label>
+                <p v-if="shopifyPlanOptions.length === 0" class="px-2.5 py-1.5 text-sm text-muted-foreground italic">No Shopify plans</p>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <!-- Install Count Filter -->
+            <Collapsible v-model:open="openSections.installCount">
+              <CollapsibleTrigger class="group mb-2.5 flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-sm font-medium text-foreground">
+                <ArrowLeftRight class="size-4" />
+                <span class="flex-1 text-left">Install Count</span>
+                <ChevronDown class="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent class="flex items-center gap-2">
+                <Input
+                  :model-value="installCountMin ?? ''"
+                  @update:model-value="(value) => (installCountMin = toCount(value))"
+                  type="number"
+                  name="install_count_min"
+                  placeholder="Min"
+                  aria-label="Minimum install count"
+                  @change="applyFilters"
+                />
+                <span class="text-muted-foreground">-</span>
+                <Input
+                  :model-value="installCountMax ?? ''"
+                  @update:model-value="(value) => (installCountMax = toCount(value))"
+                  type="number"
+                  name="install_count_max"
+                  placeholder="Max"
+                  aria-label="Maximum install count"
+                  @change="applyFilters"
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        </Card>
       </div>
 
       <!-- Right Column: Existing Content -->
       <div class="flex-1 min-w-0 space-y-6">
-        <div class="bg-white rounded-lg p-5 border border-gray-200">
-          <div class="flex flex-wrap items-center justify-between gap-4">
+        <Card size="sm">
+          <CardContent class="flex flex-wrap items-center justify-between gap-4">
             <!-- Left side: Search -->
             <div class="flex items-center gap-2 min-w-[250px] max-w-md">
-              <div class="relative flex-1">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  name="search"
-                  placeholder="Search"
-                  class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-teal focus:border-teal sm:text-sm"
-                  @keyup.enter="applyFilters"
-                />
-                <!-- Clear button (shows when there's text) -->
-                <button
-                  v-if="searchQuery"
-                  @click="clearSearch"
-                  class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer hover:text-gray-600"
-                  title="Clear search"
-                >
-                  <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+              <SearchInput
+                v-model="searchQuery"
+                name="search"
+                placeholder="Search"
+                container-class="flex-1"
+                clearable
+                @search="applyFilters"
+                @clear="clearSearch"
+              />
+
+              <!-- Total Count -->
+              <div class="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                Showing <span class="font-semibold text-primary">{{ (installationsStore.pagination?.total ?? 0).toLocaleString() }}</span> items
               </div>
-              
-               <!-- Total Count -->
-               <div class="text-sm font-medium text-gray-700 whitespace-nowrap">
-                 Showing <span class="font-semibold text-teal">{{ (installationsStore.pagination?.total ?? 0).toLocaleString() }}</span> items
-               </div>
             </div>
 
             <!-- Right side: Export Button -->
             <div class="flex items-center gap-2">
               <!-- Navigation Arrows -->
               <div class="flex items-center gap-1">
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   @click="setDateRange('previous')"
                   :disabled="!date || date.length === 0 || date[0] === null"
-                  class="p-1 rounded-lg hover:bg-gray-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Previous page"
+                  aria-label="Previous page"
                 >
-                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
+                  <ChevronLeft />
+                </Button>
 
                 <!-- Date Range -->
                 <div class="flex items-center gap-2">
-                  <VueDatePicker
-                      v-model="date"
-                      multi-calendars
-                      auto-apply
-                      :range="true"
-                      :time-config="{ enableTimePicker: false }"
-                      :placeholder="dateRangePlaceholderText"
-                      :preset-dates="presetDates"
-                      @update:model-value="handleDateChange"
-                  >
-                    <template #arrow-left>
-                        <i class="icon-chevron-left-regular"/>
-                    </template>
-                    <template #arrow-right>
-                        <i class="icon-chevron-right-regular"/>
-                    </template>
-                    <template
-                        v-if="date"
-                        #preset-date-range-button="{ label, value, presetDate }"
-                    >
-                        <span
-                            role="button"
-                            :tabindex="0"
-                            @click="presetDate(value)"
-                            @keyup.enter.prevent="presetDate(value)"
-                            @keyup.space.prevent="presetDate(value)"
-                        >
-                          {{ label }}
-                        </span>
-                    </template>
-                  </VueDatePicker>
+                  <DateRangePicker v-model="date" @change="handleDateChange" />
                 </div>
-                
-                <button
+
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   @click="setDateRange('next')"
                   :disabled="!date || date.length === 0 || date[0] === null"
-                  class="p-1 rounded-lg hover:bg-gray-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Next date range"
+                  aria-label="Next date range"
                 >
-                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                  <ChevronRight />
+                </Button>
               </div>
 
-              <button
+              <Button
                 v-if="authStore.hasPermission('installations.export')"
                 @click="handleExport"
                 :disabled="exporting"
                 :title="`Export all ${(installationsStore.pagination?.total ?? 0).toLocaleString()} matching installations`"
-                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg
-                  v-if="exporting"
-                  class="-ml-1 mr-2 h-5 w-5 animate-spin text-gray-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                <svg v-else class="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+                <Spinner v-if="exporting" />
+                <Download v-else />
                 {{ exporting ? 'Exporting...' : 'Export' }}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-
-
+          </CardContent>
+        </Card>
 
         <!-- Error State -->
-        <div v-if="installationsStore.error" class="bg-red-50 p-4 rounded-lg">
-          <p class="text-red-800">{{ installationsStore.error }}</p>
-        </div>
+        <AppAlert v-if="installationsStore.error" tone="danger">
+          {{ installationsStore.error }}
+        </AppAlert>
 
         <!-- Installations Table -->
-        <div v-else class="bg-white overflow-hidden rounded-lg border border-gray-200">
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th 
-                    v-if="!appId"
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('app_name')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>App</span>
-                      <SortIcon v-if="sortBy !== 'app_name'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('store_name')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Store</span>
-                      <SortIcon v-if="sortBy !== 'store_name'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('email')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Email</span>
-                      <SortIcon v-if="sortBy !== 'email'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('app_plan')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Plan</span>
-                      <SortIcon v-if="sortBy !== 'app_plan'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('shopify_plan')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Shopify Plan</span>
-                      <SortIcon v-if="sortBy !== 'shopify_plan'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('is_active')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Status</span>
-                      <SortIcon v-if="sortBy !== 'is_active'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    class="px-6 py-3 text-left text-sm font-semibold text-gray-600 tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                    @click="handleSort('installed_at')"
-                  >
-                    <div class="flex items-center space-x-1">
-                      <span>Installed</span>
-                      <SortIcon v-if="sortBy !== 'installed_at'" size="sm" class="text-gray-400" />
-                      <ChevronDown v-else :class="['text-teal transition-transform duration-200', sortOrder === 'asc' ? 'rotate-180' : '']" size="sm" />
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <template v-if="installationsStore.loading">
-                  <tr v-for="i in 5" :key="i">
-                    <td v-if="!appId" class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="150px" height="24px" custom-class="rounded-full" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="200px" height="16px" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="80px" height="24px" custom-class="rounded-full" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="24px" custom-class="rounded-full" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
-                    <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="100px" height="16px" /></td>
-                  </tr>
-                </template>
-                <tr v-else v-for="installation in paginatedInstallations" :key="installation.id" class="hover:bg-gray-50">
-                  <td v-if="!appId" class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm font-medium text-gray-900">{{ installation.app?.app_name || 'N/A' }}</div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center gap-1.5 text-sm font-medium">
-                      <span
-                        :class="[
-                          'inline-flex items-center rounded-full px-2.5 py-0.5',
-                          getInstallCountColor(installation.install_count)
-                        ]"
-                        :title="getInstallCountTitle(installation.install_count)"
+        <Card v-else class="gap-0 overflow-hidden py-0">
+          <Table>
+            <TableHeader class="bg-muted/50">
+              <TableRow class="hover:bg-transparent">
+                <TableHead
+                  v-for="column in columns"
+                  :key="column.key"
+                  scope="col"
+                  class="cursor-pointer select-none px-6 text-muted-foreground font-semibold hover:bg-muted"
+                  @click="handleSort(column.key)"
+                >
+                  <div class="flex items-center gap-1">
+                    <span>{{ column.label }}</span>
+                    <ArrowUpDown v-if="sortBy !== column.key" class="size-4 text-muted-foreground" />
+                    <ArrowUp v-else-if="sortOrder === 'asc'" class="size-4 text-primary" />
+                    <ArrowDown v-else class="size-4 text-primary" />
+                  </div>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <template v-if="installationsStore.loading">
+                <TableRow v-for="i in 5" :key="i">
+                  <TableCell v-if="!appId" class="px-6 py-4"><SkeletonLoader width="100px" height="16px" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="150px" height="24px" custom-class="rounded-full" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="200px" height="16px" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="80px" height="24px" custom-class="rounded-full" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="100px" height="24px" custom-class="rounded-full" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></TableCell>
+                  <TableCell class="px-6 py-4"><SkeletonLoader width="100px" height="16px" /></TableCell>
+                </TableRow>
+              </template>
+              <TableRow v-else v-for="installation in paginatedInstallations" :key="installation.id">
+                <TableCell v-if="!appId" class="px-6 py-4 font-medium text-foreground">
+                  {{ installation.app?.app_name || 'N/A' }}
+                </TableCell>
+                <TableCell class="px-6 py-4">
+                  <div class="flex items-center gap-1.5">
+                    <StatusBadge
+                      :tone="getInstallCountTone(installation.install_count)"
+                      :title="getInstallCountTitle(installation.install_count)"
+                    >
+                      {{ installation.store_name }}
+                    </StatusBadge>
+                    <StatusBadge
+                      :tone="getInstallCountTone(installation.install_count)"
+                      class="font-semibold tabular-nums"
+                      :title="getInstallCountTitle(installation.install_count)"
+                    >
+                      {{ installation.install_count }}
+                    </StatusBadge>
+                    <a
+                      v-if="installation.store_url"
+                      :href="'https://' + installation.store_url"
+                      target="_blank"
+                      class="text-muted-foreground hover:text-primary transition-colors"
+                      title="Open store in new tab"
+                    >
+                      <ExternalLink class="size-4" />
+                    </a>
+                  </div>
+                </TableCell>
+                <TableCell class="px-6 py-4 text-muted-foreground">
+                  {{ installation.email }}
+                </TableCell>
+                <TableCell class="px-6 py-4 whitespace-normal">
+                  <div v-if="getPlanDetails(installation.app_plan)" class="flex flex-col gap-1.5">
+                    <StatusBadge tone="info">
+                      {{ getPlanDetails(installation.app_plan)?.name }}
+                    </StatusBadge>
+                    <template v-if="getPlanDetails(installation.app_plan)?.isDetailed">
+                      <StatusBadge
+                        :tone="getPlanDetails(installation.app_plan)?.status?.toLowerCase() === 'cancelled' ? 'danger' : 'info'"
+                        class="text-[10px] capitalize"
                       >
-                        {{ installation.store_name }}
-                      </span>
-                      <span
-                        :class="[
-                          'inline-flex items-center rounded-full px-2 text-xs leading-5 font-semibold tabular-nums',
-                          getInstallCountColor(installation.install_count)
-                        ]"
-                        :title="getInstallCountTitle(installation.install_count)"
-                      >
-                        {{ installation.install_count }}
-                      </span>
-                      <a 
-                        v-if="installation.store_url" 
-                        :href="'https://' + installation.store_url" 
-                        target="_blank" 
-                        class="text-gray-400 hover:text-teal transition-colors"
-                        title="Open store in new tab"
-                      >
-                        <ExternalLinkIcon size="sm" />
-                      </a>
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm text-gray-500">
-                      {{ installation.email }}
-                    </div>
-                  </td>
-                  <td class="px-6 py-4">
-                    <div v-if="getPlanDetails(installation.app_plan)" class="flex flex-col gap-1.5">
-                      <span class="px-2 w-max inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-light text-blue">
-                        {{ getPlanDetails(installation.app_plan)?.name }}
-                      </span>
-                      <template v-if="getPlanDetails(installation.app_plan)?.isDetailed">
-                        <span 
-                          :class="[
-                            'px-2 w-max text-[10px] leading-5 font-semibold rounded-full capitalize',
-                            getPlanDetails(installation.app_plan)?.status?.toLowerCase() === 'cancelled' 
-                              ? 'bg-red-50 text-red-600' 
-                              : 'bg-blue-light text-teal'
-                          ]"
-                        >
-                          {{ getPlanDetails(installation.app_plan)?.status?.toLowerCase() }}
-                        </span>
-                        <span v-if="getPlanDetails(installation.app_plan)?.validity" class="px-2 w-max text-[10px] leading-5 font-semibold rounded-full bg-blue-light text-teal">
-                          Valid until {{ getPlanDetails(installation.app_plan)?.validity }}
-                        </span>
-                      </template>
-                    </div>
-                    <span v-else class="text-sm text-gray-400 italic">No plan</span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-violet-light text-violet-100">
-                      {{ getShopifyPlan(installation.shopify_plan) }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getStatusColor(installation.is_active)]">
-                      {{ getStatusText(installation.is_active) }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ installation.installed_at ? dayjs(installation.installed_at).format('MMM DD, YYYY') : 'N/A' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                        {{ getPlanDetails(installation.app_plan)?.status?.toLowerCase() }}
+                      </StatusBadge>
+                      <StatusBadge v-if="getPlanDetails(installation.app_plan)?.validity" tone="info" class="text-[10px]">
+                        Valid until {{ getPlanDetails(installation.app_plan)?.validity }}
+                      </StatusBadge>
+                    </template>
+                  </div>
+                  <span v-else class="text-sm text-muted-foreground italic">No plan</span>
+                </TableCell>
+                <TableCell class="px-6 py-4">
+                  <StatusBadge>
+                    {{ getShopifyPlan(installation.shopify_plan) }}
+                  </StatusBadge>
+                </TableCell>
+                <TableCell class="px-6 py-4">
+                  <StatusBadge :tone="getStatusTone(installation.is_active)">
+                    {{ getStatusText(installation.is_active) }}
+                  </StatusBadge>
+                </TableCell>
+                <TableCell class="px-6 py-4 text-muted-foreground">
+                  {{ installation.installed_at ? dayjs(installation.installed_at).format('MMM DD, YYYY') : 'N/A' }}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
 
           <!-- Empty State -->
-          <div v-if="paginatedInstallations.length === 0" class="text-center py-12">
-            <p class="text-gray-500">No installations found</p>
-          </div>
+          <Empty v-if="paginatedInstallations.length === 0" class="py-12">
+            <EmptyDescription>No installations found</EmptyDescription>
+          </Empty>
 
           <!-- Pagination -->
-          <div v-if="paginatedInstallations.length > 0" class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-            <div class="flex-1 flex items-center justify-between">
-              <div class="flex items-center space-x-4">
-                <p class="text-sm text-gray-700">
-                  {{ paginationInfo }}
-                </p>
-                <div class="flex items-center space-x-2">
-                  <label for="perPage" class="text-sm text-gray-700">Per Page</label>
-                  <select
-                    id="perPage"
-                    v-model.number="perPage"
-                    class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-teal focus:border-teal"
-                  >
-                    <option :value="25">25</option>
-                    <option :value="50">50</option>
-                    <option :value="100">100</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <nav class="relative z-0 inline-flex rounded-lg shadow-sm -space-x-px" aria-label="Pagination">
-                  <!-- Previous Button -->
-                  <button
-                    @click="goToPage(currentPage - 1)"
-                    :disabled="currentPage === 1"
-                    :class="[
-                      'relative inline-flex items-center px-2 py-2 rounded-l-lg border border-gray-300 bg-white text-sm font-medium',
-                      currentPage === 1 
-                        ? 'text-gray-300 cursor-not-allowed' 
-                        : 'text-gray-500 hover:bg-gray-50 cursor-pointer'
-                    ]"
-                  >
-                    <span class="sr-only">Previous</span>
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                  </button>
-
-                  <!-- Page Numbers -->
-                  <template v-for="(page, index) in visiblePages" :key="index">
-                    <button
-                      v-if="page !== '...'"
-                      @click="goToPage(page as number)"
-                      :class="[
-                        'relative inline-flex items-center px-4 py-2 border text-sm font-medium cursor-pointer',
-                        page === currentPage
-                          ? 'z-10 bg-teal border-teal text-white'
-                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                      ]"
-                    >
-                      {{ page }}
-                    </button>
-                    <span
-                      v-else
-                      class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"
-                    >
-                      ...
-                    </span>
-                  </template>
-
-                  <!-- Next Button -->
-                  <button
-                    @click="goToPage(currentPage + 1)"
-                    :disabled="currentPage === totalPages"
-                    :class="[
-                      'relative inline-flex items-center px-2 py-2 rounded-r-lg border border-gray-300 bg-white text-sm font-medium',
-                      currentPage === totalPages 
-                        ? 'text-gray-300 cursor-not-allowed' 
-                        : 'text-gray-500 hover:bg-gray-50 cursor-pointer'
-                    ]"
-                  >
-                    <span class="sr-only">Next</span>
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                    </svg>
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </div>
+          <AppPagination
+            v-if="paginatedInstallations.length > 0"
+            v-model:per-page="perPage"
+            :current-page="currentPage"
+            :last-page="totalPages"
+            :total="installationsStore.pagination?.total ?? 0"
+            :from="installationsStore.pagination?.from"
+            :to="installationsStore.pagination?.to"
+            item-label="installations"
+            :per-page-options="[25, 50, 100]"
+            @update:current-page="goToPage"
+          />
+        </Card>
       </div>
     </div>
   </div>

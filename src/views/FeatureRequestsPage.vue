@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import Swal from 'sweetalert2';
+import { Lightbulb } from '@lucide/vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import AppPagination from '@/components/common/AppPagination.vue';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from '@/components/ui/empty';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import StatusChip from '@/components/featureRequests/StatusChip.vue';
 import RequestCard from '@/components/featureRequests/RequestCard.vue';
 import RequestDetailDrawer from '@/components/featureRequests/RequestDetailDrawer.vue';
 import StatusChangeModal from '@/components/featureRequests/StatusChangeModal.vue';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
 import { formatDate } from '@/utils/date';
+import { toggleInList } from '@/lib/list';
 import {
   FEATURE_REQUEST_STATUSES,
   featureRequestService,
@@ -60,20 +70,20 @@ function emptyColumns(): Record<FeatureRequestStatus, FeatureRequest[]> {
 }
 
 const appOptions = computed(() => [
-  { value: null, name: 'All apps' },
-  ...appsStore.apps.map((app) => ({ value: app.id, name: app.app_name })),
+  { value: null, label: 'All apps' },
+  ...appsStore.appOptions,
 ]);
 
-const sortOptions = [
-  { value: 'votes', name: 'Most voted' },
-  { value: 'trending', name: 'Trending' },
-  { value: 'newest', name: 'Newest' },
-  { value: 'oldest', name: 'Oldest' },
+const sortOptions: { value: typeof sortBy.value; label: string }[] = [
+  { value: 'votes', label: 'Most voted' },
+  { value: 'trending', label: 'Trending' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
 ];
 
 const statusOptions = computed(() => [
-  { value: null, name: 'All statuses' },
-  ...FEATURE_REQUEST_STATUSES.map((s) => ({ value: s.value, name: s.label })),
+  { value: null, label: 'All statuses' },
+  ...FEATURE_REQUEST_STATUSES,
 ]);
 
 const sharedFilters = computed(() => ({
@@ -109,7 +119,7 @@ const load = async () => {
   try {
     await (viewMode.value === 'kanban' ? loadKanban() : loadTable());
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to load feature requests' });
+    toast.error((err as Error).message || 'Failed to load feature requests');
   } finally {
     loading.value = false;
   }
@@ -159,7 +169,7 @@ const openDrawer = async (request: FeatureRequest) => {
     const response = await featureRequestService.getById(request.id);
     activeRequest.value = response.data;
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to load request' });
+    toast.error((err as Error).message || 'Failed to load request');
   } finally {
     drawerLoading.value = false;
   }
@@ -175,10 +185,10 @@ const patchActive = async (data: Partial<FeatureRequest>, successMessage: string
   try {
     const response = await featureRequestService.update(activeRequest.value.id, data);
     activeRequest.value = { ...activeRequest.value, ...response.data };
-    Toast.fire({ icon: 'success', title: successMessage });
+    toast.success(successMessage);
     await load();
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to save' });
+    toast.error((err as Error).message || 'Failed to save');
   }
 };
 
@@ -217,10 +227,10 @@ const postReply = async (body: string) => {
   try {
     const response = await featureRequestService.addComment(activeRequest.value.id, body);
     activeRequest.value = response.data;
-    Toast.fire({ icon: 'success', title: 'Reply posted' });
+    toast.success('Reply posted');
     await load();
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to post reply' });
+    toast.error((err as Error).message || 'Failed to post reply');
   }
 };
 
@@ -228,55 +238,51 @@ const toggleComment = async (comment: FeatureRequestComment) => {
   try {
     await featureRequestService.setCommentHidden(comment.id, !comment.is_hidden);
     await refreshActive();
-    Toast.fire({ icon: 'success', title: comment.is_hidden ? 'Comment restored' : 'Comment hidden' });
+    toast.success(comment.is_hidden ? 'Comment restored' : 'Comment hidden');
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to update comment' });
+    toast.error((err as Error).message || 'Failed to update comment');
   }
 };
 
 const deleteComment = async (comment: FeatureRequestComment) => {
-  const confirmed = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: 'Delete this comment?',
-    text: 'It is removed from the board for everyone.',
-    showCancelButton: true,
-    confirmButtonText: 'Delete',
-    confirmButtonColor: '#F83939',
+    description: 'It is removed from the board for everyone.',
+    confirmText: 'Delete',
+    destructive: true,
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     await featureRequestService.removeComment(comment.id);
     await refreshActive();
     await load();
-    Toast.fire({ icon: 'success', title: 'Comment deleted' });
+    toast.success('Comment deleted');
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to delete comment' });
+    toast.error((err as Error).message || 'Failed to delete comment');
   }
 };
 
 const deleteRequest = async () => {
   if (!activeRequest.value) return;
 
-  const confirmed = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: 'Delete this request?',
-    text: 'It disappears from the board. Votes are kept.',
-    showCancelButton: true,
-    confirmButtonText: 'Delete',
-    confirmButtonColor: '#F83939',
+    description: 'It disappears from the board. Votes are kept.',
+    confirmText: 'Delete',
+    destructive: true,
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     await featureRequestService.remove(activeRequest.value.id);
     drawerOpen.value = false;
-    Toast.fire({ icon: 'success', title: 'Request deleted' });
+    toast.success('Request deleted');
     await load();
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to delete request' });
+    toast.error((err as Error).message || 'Failed to delete request');
   }
 };
 
@@ -310,17 +316,17 @@ const confirmStatusChange = async (payload: {
   try {
     if (bulkMode.value) {
       const response = await featureRequestService.bulkStatus({ ids: selectedIds.value, ...payload });
-      Toast.fire({ icon: 'success', title: response.message || `${response.data.updated} requests moved` });
+      toast.success(response.message || `${response.data.updated} requests moved`);
     } else if (statusModalRequest.value) {
       await featureRequestService.changeStatus(statusModalRequest.value.id, payload);
-      Toast.fire({ icon: 'success', title: 'Status updated' });
+      toast.success('Status updated');
     }
 
     statusModalOpen.value = false;
     drawerOpen.value = false;
     await load();
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to update status' });
+    toast.error((err as Error).message || 'Failed to update status');
   } finally {
     statusSaving.value = false;
   }
@@ -352,12 +358,15 @@ const toggleAll = () => {
 };
 
 const toggleOne = (id: number) => {
-  selectedIds.value = selectedIds.value.includes(id)
-    ? selectedIds.value.filter((value) => value !== id)
-    : [...selectedIds.value, id];
+  selectedIds.value = toggleInList(selectedIds.value, id, !selectedIds.value.includes(id));
 };
 
 const lastPage = computed(() => Math.max(1, Math.ceil(tableTotal.value / 20)));
+
+const setViewMode = (value: unknown) => {
+  // A single ToggleGroup can be deselected; a view mode is always required.
+  if (value === 'kanban' || value === 'table') viewMode.value = value;
+};
 
 const goToPage = (page: number) => {
   if (page < 1 || page > lastPage.value) return;
@@ -371,60 +380,61 @@ const goToPage = (page: number) => {
   <div>
     <PageHeader title="Feature Requests" description="What merchants are asking for, and what you've promised them.">
       <template #actions>
-        <router-link
+        <Button
           v-if="authStore.hasPermission('board_settings.edit')"
-          :to="{ name: 'board-settings' }"
-          class="rounded-sm border border-grey px-3 py-2 text-b5 font-semibold text-mid hover:bg-lighter"
+          as-child
+          variant="outline"
+          size="sm"
         >
-          Board settings
-        </router-link>
-        <div class="flex items-center gap-1 rounded-sm bg-lighter p-1">
-          <button
+          <router-link :to="{ name: 'board-settings' }">
+            Board settings
+          </router-link>
+        </Button>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          :model-value="viewMode"
+          aria-label="View mode"
+          @update:model-value="setViewMode"
+        >
+          <ToggleGroupItem
             v-for="mode in (['kanban', 'table'] as ViewMode[])"
             :key="mode"
-            class="rounded-xsm px-3 py-1.5 text-b5 font-semibold capitalize transition"
-            :class="viewMode === mode ? 'bg-white text-dark shadow-sm' : 'text-mid hover:text-dark'"
-            @click="viewMode = mode"
+            :value="mode"
+            class="capitalize"
           >
             {{ mode }}
-          </button>
-        </div>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </template>
     </PageHeader>
 
     <!-- filters -->
     <div class="mb-5 flex flex-wrap items-center gap-3">
       <SearchInput v-model="searchQuery" placeholder="Search requests" container-class="w-full sm:w-72" />
-      <SelectInput v-model="selectedAppId" select-class="w-44">
-        <option v-for="option in appOptions" :key="String(option.value)" :value="option.value">
-          {{ option.name }}
-        </option>
-      </SelectInput>
-      <SelectInput v-model="sortBy" select-class="w-40">
-        <option v-for="option in sortOptions" :key="option.value" :value="option.value">{{ option.name }}</option>
-      </SelectInput>
-      <SelectInput v-if="viewMode === 'table'" v-model="statusFilter" select-class="w-40">
-        <option v-for="option in statusOptions" :key="String(option.value)" :value="option.value">
-          {{ option.name }}
-        </option>
-      </SelectInput>
+      <SelectInput v-model="selectedAppId" :options="appOptions" select-class="w-44" />
+      <SelectInput v-model="sortBy" :options="sortOptions" select-class="w-40" />
+      <SelectInput v-if="viewMode === 'table'" v-model="statusFilter" :options="statusOptions" select-class="w-40" />
 
       <!-- bulk bar -->
-      <div v-if="viewMode === 'table' && selectedIds.length" class="ml-auto flex items-center gap-2">
-        <span class="text-b5 text-mid">{{ selectedIds.length }} selected</span>
-        <button
+      <div v-if="viewMode === 'table' && selectedIds.length" class="ml-auto flex flex-wrap items-center gap-2">
+        <span class="text-[13px] text-muted-foreground">{{ selectedIds.length }} selected</span>
+        <Button
           v-for="status in FEATURE_REQUEST_STATUSES"
           :key="status.value"
-          class="rounded-sm border border-grey px-2.5 py-1.5 text-b6 font-semibold text-mid hover:border-primary hover:text-primary"
+          variant="outline"
+          size="xs"
           @click="askBulkStatusChange(status.value)"
         >
           {{ status.label }}
-        </button>
+        </Button>
       </div>
     </div>
 
     <!-- kanban -->
     <div v-if="viewMode === 'kanban'" class="custom-scrollbar grid grid-flow-col auto-cols-[300px] gap-4 overflow-x-auto pb-4">
+      <!-- Original layout: a header box per column, cards straight on the page background -->
       <section
         v-for="status in FEATURE_REQUEST_STATUSES"
         :key="status.value"
@@ -432,11 +442,11 @@ const goToPage = (page: number) => {
         @dragover.prevent
         @drop="onDrop(status.value)"
       >
-        <header class="mb-3 flex items-center gap-2 rounded-md border border-lighter bg-white px-3 py-2.5">
+        <header class="mb-3 flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 shadow-xs">
           <StatusChip :status="status.value" :label="status.label" />
-          <span class="ml-auto rounded-full bg-lighter px-2 py-0.5 text-b6 font-semibold tabular-nums text-mid">
+          <Badge variant="secondary" class="ml-auto tabular-nums">
             {{ counts[status.value] ?? 0 }}
-          </span>
+          </Badge>
         </header>
 
         <div v-if="loading" class="space-y-2">
@@ -454,12 +464,15 @@ const goToPage = (page: number) => {
             @dragstart="draggingId = request.id"
             @dragend="draggingId = null"
           />
-          <p v-if="!columns[status.value].length" class="rounded-md border border-dashed border-grey px-3 py-6 text-center text-b5 text-light">
+          <p
+            v-if="!columns[status.value].length"
+            class="rounded-lg border border-dashed px-3 py-6 text-center text-[13px] text-muted-foreground"
+          >
             Nothing here
           </p>
           <p
             v-else-if="(counts[status.value] ?? 0) > columns[status.value].length"
-            class="px-1 text-b6 text-light"
+            class="px-1 text-xs text-muted-foreground"
           >
             Showing {{ columns[status.value].length }} of {{ counts[status.value] }} — use the table view for the rest.
           </p>
@@ -468,77 +481,74 @@ const goToPage = (page: number) => {
     </div>
 
     <!-- table -->
-    <div v-else class="overflow-hidden rounded-md border border-lighter bg-white">
-      <table class="w-full text-left">
-        <thead class="bg-artboard text-b6 tracking-wide text-light uppercase">
-          <tr>
-            <th class="w-10 px-3 py-3">
-              <input type="checkbox" class="h-4 w-4 accent-primary" :checked="allSelected" @change="toggleAll" />
-            </th>
-            <th class="px-3 py-3 font-semibold">Request</th>
-            <th class="px-3 py-3 font-semibold">Store</th>
-            <th class="px-3 py-3 font-semibold">Status</th>
-            <th class="px-3 py-3 text-right font-semibold">Votes</th>
-            <th class="px-3 py-3 font-semibold">Opened</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="6" class="px-3 py-6"><SkeletonLoader height="1.5rem" /></td>
-          </tr>
-          <tr v-else-if="!tableRows.length">
-            <td colspan="6" class="px-3 py-10 text-center text-b4 text-light">No feature requests match these filters.</td>
-          </tr>
-          <tr
+    <Card v-else class="gap-0 overflow-hidden py-0">
+      <Table>
+        <TableHeader class="bg-muted/50">
+          <TableRow>
+            <TableHead class="w-10">
+              <Checkbox :model-value="allSelected" aria-label="Select all requests" @update:model-value="toggleAll" />
+            </TableHead>
+            <TableHead>Request</TableHead>
+            <TableHead>Store</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead class="text-right">Votes</TableHead>
+            <TableHead>Opened</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-if="loading">
+            <TableCell colspan="6" class="py-6"><SkeletonLoader height="1.5rem" /></TableCell>
+          </TableRow>
+          <TableEmpty v-else-if="!tableRows.length" :colspan="6">
+            <Empty class="p-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Lightbulb />
+                </EmptyMedia>
+                <EmptyDescription>No feature requests match these filters.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </TableEmpty>
+          <TableRow
             v-for="request in tableRows"
             v-else
             :key="request.id"
-            class="cursor-pointer border-t border-lighter hover:bg-artboard"
+            class="cursor-pointer"
+            :data-state="selectedIds.includes(request.id) ? 'selected' : undefined"
             @click="openDrawer(request)"
           >
-            <td class="px-3 py-3" @click.stop>
-              <input
-                type="checkbox"
-                class="h-4 w-4 accent-primary"
-                :checked="selectedIds.includes(request.id)"
-                @change="toggleOne(request.id)"
+            <TableCell @click.stop>
+              <Checkbox
+                :model-value="selectedIds.includes(request.id)"
+                aria-label="Select request"
+                @update:model-value="toggleOne(request.id)"
               />
-            </td>
-            <td class="px-3 py-3">
-              <span class="block text-b4 font-semibold text-dark">{{ request.title }}</span>
-              <span v-if="request.app" class="block text-b6 text-light">{{ request.app.app_name }}</span>
-            </td>
-            <td class="px-3 py-3 text-b5 text-mid">
+            </TableCell>
+            <TableCell class="whitespace-normal">
+              <span class="block text-sm font-semibold text-foreground">{{ request.title }}</span>
+              <span v-if="request.app" class="block text-xs text-muted-foreground">{{ request.app.app_name }}</span>
+            </TableCell>
+            <TableCell class="text-[13px] text-muted-foreground">
               {{ request.installation?.store_name || request.submitter_name || '—' }}
-            </td>
-            <td class="px-3 py-3"><StatusChip :status="request.status" :label="request.status_label" /></td>
-            <td class="px-3 py-3 text-right text-b4 font-semibold tabular-nums text-dark">{{ request.votes_count }}</td>
-            <td class="px-3 py-3 text-b5 text-mid">{{ formatDate(request.created_at, '—') }}</td>
-          </tr>
-        </tbody>
-      </table>
+            </TableCell>
+            <TableCell><StatusChip :status="request.status" :label="request.status_label" /></TableCell>
+            <TableCell class="text-right text-sm font-semibold tabular-nums text-foreground">{{ request.votes_count }}</TableCell>
+            <TableCell class="text-[13px] text-muted-foreground">{{ formatDate(request.created_at, '—') }}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
-      <div v-if="tableTotal > 20" class="flex items-center justify-between border-t border-lighter px-4 py-3">
-        <span class="text-b5 text-mid">{{ tableTotal }} requests</span>
-        <div class="flex items-center gap-2">
-          <button
-            class="rounded-sm border border-grey px-3 py-1.5 text-b5 text-mid disabled:opacity-40"
-            :disabled="currentPage === 1"
-            @click="goToPage(currentPage - 1)"
-          >
-            Previous
-          </button>
-          <span class="text-b5 text-mid">Page {{ currentPage }} of {{ lastPage }}</span>
-          <button
-            class="rounded-sm border border-grey px-3 py-1.5 text-b5 text-mid disabled:opacity-40"
-            :disabled="currentPage === lastPage"
-            @click="goToPage(currentPage + 1)"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
+      <AppPagination
+        v-if="tableTotal > 20"
+        :current-page="currentPage"
+        :last-page="lastPage"
+        :per-page="20"
+        :total="tableTotal"
+        item-label="requests"
+        :per-page-options="[]"
+        @update:current-page="goToPage"
+      />
+    </Card>
 
     <RequestDetailDrawer
       :open="drawerOpen"

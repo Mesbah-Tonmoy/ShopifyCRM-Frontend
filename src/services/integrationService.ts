@@ -5,7 +5,7 @@ export interface Integration {
     key: string;
     name: string;
     is_enabled: boolean;
-    config: Record<string, any> | null;
+    config: Record<string, string> | null;
     created_at: string;
     updated_at: string;
 }
@@ -32,7 +32,7 @@ export const integrationService = {
         return apiService.get<Integration[]>('/integrations');
     },
 
-    async update(key: string, data: { is_enabled?: boolean; config?: Record<string, any> }) {
+    async update(key: string, data: { is_enabled?: boolean; config?: Record<string, string> }) {
         return apiService.put<Integration>(`/integrations/${key}`, data);
     },
 

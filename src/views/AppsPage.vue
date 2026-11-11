@@ -3,19 +3,21 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
-import { 
-  PlusIcon, 
-  LoadingIcon, 
-  DeleteIcon, 
-  ShopifyIcon,
-  CloseIcon,
-  ChevronRight
-} from '@/components/icons';
-import SearchInput from '@/components/common/SearchInput.vue';
+import { ShopifyIcon } from '@/components/icons';
+import { Plus, Trash2, ChevronRight, RefreshCw, LayoutGrid, Package, Link } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import Swal from 'sweetalert2';
-import { Toast } from '@/utils/toast';
+import AppAlert from '@/components/common/AppAlert.vue';
+import StatusBadge from '@/components/common/StatusBadge.vue';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
 
 const router = useRouter();
 const appsStore = useAppsStore();
@@ -74,28 +76,20 @@ const handleConnect = async () => {
 };
 
 const handleResync = async (id: number) => {
-  const result = await Swal.fire({
+  const { confirmed } = await confirmDialog({
     title: 'Resync App?',
-    text: 'This will re-fetch data from the app server.',
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonColor: '#008080',
-    cancelButtonColor: '#6B7280',
-    confirmButtonText: 'Yes, resync it!'
+    description: 'This will re-fetch data from the app server.',
+    confirmText: 'Yes, resync it!'
   });
 
-  if (result.isConfirmed) {
+  if (confirmed) {
     resyncingId.value = id;
     try {
       const success = await appsStore.resyncApp(id);
       if (success) {
-        Toast.fire({
-          icon: 'success',
-          title: 'Resynced!',
-          text: 'App data has been updated.'
-        });
+        toast.success('Resynced!', { description: 'App data has been updated.' });
       } else {
-        Swal.fire('Error', appsStore.error || 'Failed to resync app', 'error');
+        toast.error('Error', { description: appsStore.error || 'Failed to resync app' });
       }
     } finally {
       resyncingId.value = null;
@@ -104,28 +98,21 @@ const handleResync = async (id: number) => {
 };
 
 const handleDelete = async (id: number) => {
-  const result = await Swal.fire({
+  const { confirmed } = await confirmDialog({
     title: 'Are you sure?',
-    text: "This will disconnect the app and remove its data. This action cannot be undone!",
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#d33',
-    cancelButtonColor: '#6B7280',
-    confirmButtonText: 'Yes, delete it!'
+    description: 'This will disconnect the app and remove its data. This action cannot be undone!',
+    confirmText: 'Yes, delete it!',
+    destructive: true
   });
 
-  if (result.isConfirmed) {
+  if (confirmed) {
     deletingId.value = id;
     try {
       const success = await appsStore.deleteApp(id);
       if (success) {
-        Toast.fire({
-          icon: 'success',
-          title: 'Deleted!',
-          text: 'App has been removed.'
-        });
+        toast.success('Deleted!', { description: 'App has been removed.' });
       } else {
-        Swal.fire('Error', appsStore.error || 'Failed to delete app', 'error');
+        toast.error('Error', { description: appsStore.error || 'Failed to delete app' });
       }
     } finally {
       deletingId.value = null;
@@ -136,233 +123,227 @@ const handleDelete = async (id: number) => {
 
 <template>
   <div class="space-y-6">
-    <PageHeader 
-      title="Apps" 
+    <PageHeader
+      title="Apps"
       description="Manage and connect your Shopify apps to sync data."
     >
       <template #actions>
-        <button
+        <Button
           v-if="authStore.hasPermission('apps.add')"
+          size="lg"
           @click="openModal"
-          class="bg-teal text-white px-4 py-2.5 rounded-lg font-medium hover:bg-teal-dark transition-all duration-200 flex items-center shadow-sm hover:shadow-md"
         >
-          <PlusIcon size="md" class="mr-2" />
+          <Plus />
           Connect New App
-        </button>
+        </Button>
       </template>
     </PageHeader>
 
     <!-- Apps Grid Loading -->
     <div v-if="appsStore.loading && appsStore.apps.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div v-for="i in 3" :key="i" class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm overflow-hidden flex flex-col">
-        <div class="flex items-center space-x-4 mb-6">
-          <SkeletonLoader width="56px" height="56px" custom-class="rounded-xl flex-shrink-0" />
-          <div class="flex-1 min-w-0">
-            <SkeletonLoader width="140px" height="20px" custom-class="mb-2" />
-            <div class="flex items-center space-x-2">
-              <SkeletonLoader width="60px" height="18px" custom-class="rounded" />
-              <SkeletonLoader width="70px" height="14px" />
+      <Card v-for="i in 3" :key="i">
+        <CardContent class="flex flex-1 flex-col">
+          <div class="flex items-center space-x-4 mb-6">
+            <SkeletonLoader width="56px" height="56px" custom-class="rounded-xl flex-shrink-0" />
+            <div class="flex-1 min-w-0">
+              <SkeletonLoader width="140px" height="20px" custom-class="mb-2" />
+              <div class="flex items-center space-x-2">
+                <SkeletonLoader width="60px" height="18px" custom-class="rounded" />
+                <SkeletonLoader width="70px" height="14px" />
+              </div>
             </div>
           </div>
-        </div>
-        <div class="mt-auto flex items-center justify-between pt-6 border-t border-gray-50 mb-4">
-           <div class="space-y-1">
-             <SkeletonLoader width="60px" height="10px" />
-             <SkeletonLoader width="100px" height="14px" />
-           </div>
-           <SkeletonLoader width="36px" height="36px" custom-class="rounded-lg" />
-        </div>
-        <div class="flex items-center gap-2">
-           <SkeletonLoader width="100%" height="38px" custom-class="rounded-lg flex-1" />
-           <SkeletonLoader width="40px" height="38px" custom-class="rounded-lg" />
-        </div>
-      </div>
+          <div class="mt-auto flex items-center justify-between pt-6 border-t border-border/50">
+            <div class="space-y-1">
+              <SkeletonLoader width="60px" height="10px" />
+              <SkeletonLoader width="100px" height="14px" />
+            </div>
+            <SkeletonLoader width="36px" height="36px" custom-class="rounded-lg" />
+          </div>
+        </CardContent>
+        <CardFooter class="gap-2">
+          <SkeletonLoader width="100%" height="38px" custom-class="rounded-lg flex-1" />
+          <SkeletonLoader width="40px" height="38px" custom-class="rounded-lg" />
+        </CardFooter>
+      </Card>
     </div>
 
-    <div v-else-if="appsStore.error && appsStore.apps.length === 0" class="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center text-red-700">
-      <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+    <AppAlert v-else-if="appsStore.error && appsStore.apps.length === 0" tone="danger">
       {{ appsStore.error }}
-    </div>
+    </AppAlert>
 
     <div v-else>
       <div v-if="appsStore.apps.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div
+        <Card
           v-for="app in appsStore.apps"
           :key="app.id"
-          class="bg-white border border-gray-100 rounded-lg p-6 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden flex flex-col"
+          class="group relative"
         >
-          <!-- Accent blur -->
-          <div v-if="app.app_store_url" class="absolute -right-4 -top-4 w-24 h-24 bg-teal/50 rounded-full blur-2xl group-hover:bg-teal/70 transition-colors"></div>
-          
-          <div class="relative flex-1">
+          <!-- Accent glow on apps listed in the Shopify App Store -->
+          <div
+            v-if="app.app_store_url"
+            aria-hidden="true"
+            class="pointer-events-none absolute -top-4 -right-4 size-24 rounded-full bg-primary/40 blur-2xl transition-colors group-hover:bg-primary/60"
+          />
+
+          <CardContent class="relative flex-1">
             <!-- Shopify App Store Link -->
-            <a 
-              v-if="app.app_store_url" 
-              :href="app.app_store_url" 
-              target="_blank" 
-              class="absolute top-0 right-0 z-10 p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-[#000000] hover:shadow-lg scale-105 transition-all duration-200"
-              title="View on Shopify App Store"
-              @click.stop
+            <Button
+              v-if="app.app_store_url"
+              as-child
+              variant="outline"
+              size="icon"
+              class="absolute top-0 right-6 z-10"
             >
-              <ShopifyIcon size="md" />
-            </a>
-          
+              <a
+                :href="app.app_store_url"
+                target="_blank"
+                title="View on Shopify App Store"
+                aria-label="View on Shopify App Store"
+                @click.stop
+              >
+                <ShopifyIcon size="sm" />
+              </a>
+            </Button>
+
             <div class="flex items-start justify-between">
               <div class="flex items-center space-x-4">
-                <div v-if="app.icon" class="w-14 h-14 rounded-xl overflow-hidden shadow-sm border border-gray-50 bg-gray-50 flex-shrink-0">
+                <div v-if="app.icon" class="size-14 rounded-xl overflow-hidden border bg-muted/50 flex-shrink-0">
                   <img :src="app.icon" :alt="app.app_name" class="w-full h-full object-cover" />
                 </div>
-                <div v-else class="w-14 h-14 rounded-xl bg-teal/10 flex items-center justify-center text-teal flex-shrink-0 shadow-sm">
-                  <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
+                <div v-else class="size-14 rounded-xl bg-muted flex items-center justify-center text-foreground flex-shrink-0">
+                  <LayoutGrid class="size-7" />
                 </div>
                 <div class="min-w-0 cursor-pointer" @click="viewAppDetails(app.id)">
-                  <h3 class="text-lg font-bold text-gray-900 truncate group-hover:text-teal transition-colors">
+                  <h3 class="font-heading text-lg font-semibold text-foreground truncate transition-colors group-hover:text-primary">
                     {{ app.app_name }}
                   </h3>
                   <div class="flex items-center mt-1 space-x-2">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-50 text-green-700">
+                    <StatusBadge tone="success">
                       {{ app.active_installations_count || 0 }} Active
-                    </span>
-                    <span class="text-xs text-gray-400">•</span>
-                    <span class="text-xs text-gray-500 font-medium">{{ app.installations_count || 0 }} total</span>
+                    </StatusBadge>
+                    <span class="text-xs text-muted-foreground">•</span>
+                    <span class="text-xs text-muted-foreground font-medium">{{ app.installations_count || 0 }} total</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+            <div class="mt-6 pt-6 border-t border-border/50 flex items-center justify-between">
               <div class="flex flex-col">
-                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Last Synced</span>
-                <span class="text-xs text-gray-600 font-medium">
+                <span class="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Last Synced</span>
+                <span class="text-xs text-foreground font-medium">
                   {{ app.last_synced ? new Date(app.last_synced).toLocaleString() : 'Never' }}
                 </span>
               </div>
-              <button 
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 @click="viewAppDetails(app.id)"
-                class="p-2 rounded-lg bg-gray-50 text-gray-400 hover:bg-teal hover:text-white transition-all shadow-sm"
                 title="View Installations"
+                aria-label="View Installations"
               >
-                <ChevronRight size="md" />
-              </button>
+                <ChevronRight />
+              </Button>
             </div>
-          </div>
+          </CardContent>
 
-          <div class="mt-4 flex items-center gap-2">
-            <button
+          <CardFooter class="gap-2">
+            <Button
               v-if="authStore.hasPermission('apps.add')"
+              variant="outline"
+              class="flex-1"
               @click="handleResync(app.id)"
               :disabled="appsStore.loading || resyncingId === app.id || deletingId === app.id"
-              class="flex-1 py-2 text-sm font-medium text-teal bg-teal/5 rounded-lg hover:bg-teal hover:text-white transition-all flex items-center justify-center gap-2 border border-teal/10 shadow-sm disabled:opacity-50"
             >
-              <svg 
-                :class="['w-4 h-4', resyncingId === app.id ? 'animate-spin' : '']" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <Spinner v-if="resyncingId === app.id" />
+              <RefreshCw v-else />
               {{ resyncingId === app.id ? 'Resyncing...' : 'Resync' }}
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="authStore.hasPermission('apps.delete')"
+              variant="destructive"
+              size="icon"
               @click="handleDelete(app.id)"
               :disabled="appsStore.loading || resyncingId === app.id || deletingId === app.id"
-              class="px-3 py-2 text-red-500 bg-red-50 rounded-lg hover:bg-red-500 hover:text-white transition-all border border-red-100 shadow-sm disabled:opacity-50 flex items-center justify-center min-w-[40px]"
               title="Delete App"
+              aria-label="Delete App"
             >
-              <LoadingIcon v-if="deletingId === app.id" size="sm" />
-              <DeleteIcon v-else size="sm" />
-            </button>
-          </div>
-        </div>
+              <Spinner v-if="deletingId === app.id" />
+              <Trash2 v-else />
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
 
       <!-- Empty State -->
-      <div v-else class="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-dashed border-gray-200">
-        <div class="w-20 h-20 bg-teal/5 flex items-center justify-center rounded-full text-teal mb-6">
-          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-          </svg>
-        </div>
-        <h3 class="text-xl font-bold text-gray-900">No apps connected yet</h3>
-        <p class="text-gray-500 mt-2 max-w-xs text-center">Connect your Shopify apps to start managing installations and syncing data.</p>
-        <button
-          v-if="authStore.hasPermission('apps.add')"
-          @click="openModal"
-          class="mt-8 bg-teal text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-dark transition-all shadow-lg shadow-teal/20"
-        >
-          Connect Your First App
-        </button>
-      </div>
+      <Empty v-else class="gap-8 py-32 border bg-card rounded-xl">
+        <EmptyHeader>
+          <EmptyMedia variant="icon" class="mb-4">
+            <Package />
+          </EmptyMedia>
+          <EmptyTitle>No apps connected yet</EmptyTitle>
+          <EmptyDescription>Connect your Shopify apps to start managing installations and syncing data.</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent v-if="authStore.hasPermission('apps.add')">
+          <Button size="lg" @click="openModal">
+            Connect Your First App
+          </Button>
+        </EmptyContent>
+      </Empty>
     </div>
 
     <!-- Connect App Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 transition-opacity bg-gray-900/50 backdrop-blur-sm" @click="closeModal"></div>
+    <Dialog :open="showModal" @update:open="(open) => { if (!open) closeModal(); }">
+      <DialogContent class="p-8 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Connect New App</DialogTitle>
+        </DialogHeader>
 
-        <div class="relative bg-white w-full max-w-lg p-8 my-8 transition-all shadow-2xl rounded-3xl">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-2xl font-bold text-gray-900">Connect New App</h3>
-            <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
-              <CloseIcon size="lg" />
-            </button>
-          </div>
-
-          <div class="space-y-6">
-            <div>
-              <label for="app-url" class="block text-sm font-bold text-gray-700 mb-2">App URL</label>
-              <div class="relative">
-                <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                </div>
-                <input
-                  id="app-url"
-                  v-model="appUrl"
-                  type="url"
-                  placeholder="https://your-shopify-app.com"
-                  class="block w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal/20 focus:border-teal transition-all outline-none"
-                  :disabled="connecting"
-                  @keyup.enter="handleConnect"
-                />
-              </div>
-              <p class="mt-2 text-xs text-gray-500 font-medium">
-                Enter the base URL where your Shopify app is hosted. We'll use this to sync app data.
-              </p>
-            </div>
-
-            <div v-if="connectError" class="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start text-red-700 text-sm">
-              <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              {{ connectError }}
-            </div>
-
-            <div class="flex space-x-4">
-              <button
-                @click="closeModal"
-                class="flex-1 px-6 py-3 border border-gray-300 font-bold text-gray-700 rounded-xl hover:bg-gray-50 transition-all"
+        <FieldGroup>
+          <Field>
+            <FieldLabel for="app-url">App URL</FieldLabel>
+            <InputGroup>
+              <InputGroupInput
+                id="app-url"
+                v-model="appUrl"
+                type="url"
+                placeholder="https://your-shopify-app.com"
                 :disabled="connecting"
-              >
-                Cancel
-              </button>
-              <button
-                @click="handleConnect"
-                class="flex-2 bg-teal text-white px-8 py-3 rounded-xl font-bold transition-all hover:shadow-lg hover:shadow-teal/20 disabled:opacity-50 flex items-center justify-center min-w-[140px]"
-                :disabled="connecting || !appUrl"
-              >
-                <div v-if="connecting" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                {{ connecting ? 'Connecting...' : 'Connect App' }}
-              </button>
-            </div>
-          </div>
-        </div>
-    </div>
+                @keyup.enter="handleConnect"
+              />
+              <InputGroupAddon>
+                <Link />
+              </InputGroupAddon>
+            </InputGroup>
+            <FieldDescription>
+              Enter the base URL where your Shopify app is hosted. We'll use this to sync app data.
+            </FieldDescription>
+          </Field>
+
+          <AppAlert v-if="connectError" tone="danger">
+            {{ connectError }}
+          </AppAlert>
+        </FieldGroup>
+
+        <DialogFooter class="gap-4">
+          <Button
+            variant="outline"
+            @click="closeModal"
+            :disabled="connecting"
+          >
+            Cancel
+          </Button>
+          <Button
+            @click="handleConnect"
+            class="min-w-[140px]"
+            :disabled="connecting || !appUrl"
+          >
+            <Spinner v-if="connecting" />
+            {{ connecting ? 'Connecting...' : 'Connect App' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

@@ -19,4 +19,13 @@ export default defineConfigWithVueTs(
   pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
   skipFormatting,
+
+  // shadcn-vue generated primitives use single-word names (Button, Input, ...)
+  {
+    name: 'app/shadcn-ui',
+    files: ['src/components/ui/**/*.vue'],
+    rules: {
+      'vue/multi-word-component-names': 'off',
+    },
+  },
 )

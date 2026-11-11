@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import Swal from 'sweetalert2';
+import { ref, computed, onMounted, watch } from 'vue';
 import {
   emailTemplateService,
   type EmailTemplate as ApiEmailTemplate,
   type EmailTemplateFilterOptions,
 } from '@/services/emailTemplateService';
 import { useAuthStore } from '@/stores/auth';
-import { Toast } from '@/utils/toast';
-import { ViewIcon, EditIcon, CloseIcon, LoadingIcon } from '@/components/icons';
+import { toast } from '@/utils/toast';
+import { Eye, Inbox, Pencil } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import Pagination from '@/components/common/Pagination.vue';
+import AppPagination from '@/components/common/AppPagination.vue';
+import StatusBadge from '@/components/common/StatusBadge.vue';
+import { errorMessage } from '@/utils/errors';
 
 interface EmailTemplate extends ApiEmailTemplate {
   app_name?: string;
@@ -35,6 +45,7 @@ const authStore = useAuthStore();
 // Filter dropdown options come from their own endpoint: deriving them from the
 // rows on screen would only ever list what fits on the current page.
 const filterOptions = ref<EmailTemplateFilterOptions>({ apps: [], types: [] });
+const appOptions = computed(() => filterOptions.value.apps.map((app) => ({ value: app.id, label: app.app_name })));
 
 const currentPage = ref(1);
 const perPage = ref(15);
@@ -109,14 +120,10 @@ const fetchTemplates = async () => {
       rangeFrom.value = page.from;
       rangeTo.value = page.to;
     }
-  } catch (err: any) {
-    const errorMessage = err.message || 'Failed to load email templates';
+  } catch (err) {
+    const message = errorMessage(err, 'Failed to load email templates');
     console.error('Error fetching templates:', err);
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: errorMessage,
-    });
+    toast.error('Error', { description: message });
   } finally {
     loading.value = false;
   }
@@ -152,8 +159,9 @@ const openEditModal = (template: EmailTemplate) => {
 };
 
 const closeEditModal = () => {
+  // editingTemplate is left in place so the dialog keeps its content while it animates out;
+  // opening always loads a fresh copy.
   showEditModal.value = false;
-  editingTemplate.value = null;
 };
 
 const openPreviewModal = (template: EmailTemplate) => {
@@ -182,18 +190,10 @@ const saveTemplate = async () => {
 
     closeEditModal();
 
-    Toast.fire({
-      icon: 'success',
-      title: 'Template Updated!',
-      text: 'Email template has been saved successfully.'
-    });
-  } catch (err: any) {
-    const errorMessage = err.message || 'Failed to update template';
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: errorMessage,
-    });
+    toast.success('Template Updated!', { description: 'Email template has been saved successfully.' });
+  } catch (err) {
+    const message = errorMessage(err, 'Failed to update template');
+    toast.error('Error', { description: message });
   } finally {
     saving.value = false;
   }
@@ -205,8 +205,8 @@ const saveTemplate = async () => {
     <PageHeader title="Email Templates" />
 
     <!-- Filter/Search Bar -->
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-4">
+    <Card class="mb-6 py-4">
+      <CardContent class="flex flex-wrap items-center gap-4 px-4">
         <!-- Search Field -->
         <SearchInput 
           v-model="searchQuery" 
@@ -219,126 +219,111 @@ const saveTemplate = async () => {
           <!-- App Filter -->
           <SelectInput
             v-model="selectedAppId"
+            :options="appOptions"
             label="App"
             placeholder="All Apps"
             select-class="w-48"
-          >
-            <option v-for="app in filterOptions.apps" :key="app.id" :value="app.id">
-              {{ app.app_name }}
-            </option>
-          </SelectInput>
+          />
 
           <!-- Template Type Filter -->
           <SelectInput
             v-model="selectedTemplateType"
+            :options="filterOptions.types"
             label="Type"
             placeholder="All Types"
             select-class="w-56"
-          >
-            <option v-for="type in filterOptions.types" :key="type.value" :value="type.value">
-              {{ type.label }}
-            </option>
-          </SelectInput>
+          />
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
 
     <!-- Content Area -->
-    <div class="bg-white rounded-lg border border-gray-200">
-
-
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">App Name</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Template Name</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Subject</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Body</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <template v-if="loading">
-              <tr v-for="i in 5" :key="i">
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="120px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <SkeletonLoader width="100px" height="16px" custom-class="mb-2" />
-                  <SkeletonLoader width="60px" height="12px" />
-                </td>
-                <td class="px-6 py-4"><SkeletonLoader width="150px" height="16px" /></td>
-                <td class="px-6 py-4"><SkeletonLoader width="250px" height="16px" /></td>
-                <td class="px-6 py-4 whitespace-nowrap"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                  <div class="flex items-center gap-3">
-                    <SkeletonLoader width="24px" height="24px" />
-                    <SkeletonLoader width="24px" height="24px" />
-                  </div>
-                </td>
-              </tr>
-            </template>
-            <tr v-else-if="templates.length === 0">
-              <td colspan="6" class="py-20 text-center text-gray-400">
-                <svg class="w-12 h-12 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                </svg>
-                <p class="text-sm italic">No email templates found matching your criteria</p>
-              </td>
-            </tr>
-            <template v-else>
-              <tr v-for="template in templates" :key="template.id" class="hover:bg-gray-50/50 transition-colors">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">{{ template.app_name }}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900 font-medium">{{ template.template_name }}</div>
-                <div class="text-xs text-gray-500 font-mono">{{ template.type }}</div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="text-sm text-gray-900 max-w-xs truncate font-medium">{{ template.subject }}</div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="text-sm text-gray-500 max-w-md line-clamp-1 italic">{{ getShortBody(template.body) }}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span 
-                  :class="[
-                      'p-[4px_12px_6px] text-xs font-medium rounded-full',
-                    template.is_active 
-                        ? 'bg-green-lighter text-green' 
-                        : 'bg-gray-200 text-gray-600'
-                  ]"
-                >
-                  {{ template.is_active ? 'Active' : 'Inactive' }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
+    <Card class="gap-0 overflow-hidden py-0">
+      <Table>
+        <TableHeader class="bg-muted/50">
+          <TableRow>
+            <TableHead class="px-6">App Name</TableHead>
+            <TableHead class="px-6">Template Name</TableHead>
+            <TableHead class="px-6">Subject</TableHead>
+            <TableHead class="px-6">Body</TableHead>
+            <TableHead class="px-6">Status</TableHead>
+            <TableHead class="px-6">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-if="loading">
+            <TableRow v-for="i in 5" :key="i">
+              <TableCell class="px-6 py-4"><SkeletonLoader width="120px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4">
+                <SkeletonLoader width="100px" height="16px" custom-class="mb-2" />
+                <SkeletonLoader width="60px" height="12px" />
+              </TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="150px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="250px" height="16px" /></TableCell>
+              <TableCell class="px-6 py-4"><SkeletonLoader width="60px" height="24px" custom-class="rounded-full" /></TableCell>
+              <TableCell class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                  <button
-                    v-if="authStore.hasPermission('email_templates.edit')"
-                    @click="openEditModal(template)"
-                      class="text-teal hover:text-teal-dark transition-colors"
-                    title="Edit"
-                  >
-                    <EditIcon class="w-5 h-5" />
-                  </button>
-                  <button
-                    @click="openPreviewModal(template)"
-                      class="text-blue hover:text-blue-600 transition-colors"
-                    title="Preview"
-                  >
-                    <ViewIcon class="w-5 h-5" />
-                  </button>
+                  <SkeletonLoader width="24px" height="24px" />
+                  <SkeletonLoader width="24px" height="24px" />
                 </div>
-              </td>
-            </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
+              </TableCell>
+            </TableRow>
+          </template>
+          <TableEmpty v-else-if="templates.length === 0" :colspan="6" class="text-muted-foreground">
+            <div class="flex flex-col items-center py-10">
+              <Inbox class="size-12 mb-4 opacity-20" />
+              <p class="text-sm italic">No email templates found matching your criteria</p>
+            </div>
+          </TableEmpty>
+          <template v-else>
+            <TableRow v-for="template in templates" :key="template.id">
+              <TableCell class="px-6 py-4">
+                <div class="text-sm font-medium text-foreground">{{ template.app_name }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="text-sm text-foreground font-medium">{{ template.template_name }}</div>
+                <div class="text-xs text-muted-foreground font-mono">{{ template.type }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4 whitespace-normal">
+                <div class="text-sm text-foreground max-w-xs truncate font-medium">{{ template.subject }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4 whitespace-normal">
+                <div class="text-sm text-muted-foreground max-w-md line-clamp-1 italic">{{ getShortBody(template.body) }}</div>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <StatusBadge :tone="template.is_active ? 'success' : 'neutral'">
+                  {{ template.is_active ? 'Active' : 'Inactive' }}
+                </StatusBadge>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                  <Button
+                    v-if="authStore.hasPermission('email_templates.edit')"
+                    variant="ghost"
+                    size="icon-sm"
+                    @click="openEditModal(template)"
+                    title="Edit"
+                    aria-label="Edit"
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    @click="openPreviewModal(template)"
+                    title="Preview"
+                    aria-label="Preview"
+                  >
+                    <Eye />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </template>
+        </TableBody>
+      </Table>
 
-      <Pagination
+      <AppPagination
         v-if="!loading && total > 0"
         :current-page="currentPage"
         :last-page="lastPage"
@@ -350,144 +335,117 @@ const saveTemplate = async () => {
         @update:current-page="goToPage"
         @update:per-page="perPage = $event"
       />
-    </div>
+    </Card>
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal && editingTemplate" class="fixed inset-0 z-50 overflow-y-auto">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="fixed inset-0 bg-dark/20 backdrop-blur-sm transition-opacity" @click="closeEditModal"></div>
+    <Dialog :open="showEditModal && !!editingTemplate" @update:open="(open) => { if (!open) closeEditModal(); }">
+      <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <template v-if="editingTemplate">
+          <DialogHeader>
+            <DialogTitle>Edit Email Template</DialogTitle>
+            <DialogDescription>{{ editingTemplate.app_name }} • {{ editingTemplate.template_name }}</DialogDescription>
+          </DialogHeader>
 
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-3xl w-full overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-            <div>
-              <h3 class="text-lg font-bold text-gray-900">Edit Email Template</h3>
-              <p class="text-xs text-gray-500 mt-0.5">{{ editingTemplate.app_name }} • {{ editingTemplate.template_name }}</p>
-            </div>
-            <button @click="closeEditModal" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer p-1">
-              <CloseIcon class="w-6 h-6" />
-            </button>
-          </div>
-
-          <div class="p-6 space-y-5">
+          <FieldGroup>
             <!-- Active Toggle -->
-            <div class="flex items-center justify-between p-4 bg-teal/5 rounded-xl border border-teal/10">
-              <div>
-                <label class="text-sm font-bold text-gray-900">Template Status</label>
-                <p class="text-xs text-gray-500">Enable or disable this email template</p>
-              </div>
-              <button
-                @click="editingTemplate.is_active = !editingTemplate.is_active"
-                :class="[
-                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
-                  editingTemplate.is_active ? 'bg-teal' : 'bg-gray-200'
-                ]"
-              >
-                <span :class="[
-                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out',
-                  editingTemplate.is_active ? 'translate-x-5' : 'translate-x-0'
-                ]" />
-              </button>
-            </div>
+            <Field orientation="horizontal" class="rounded-xl border bg-muted/50 p-4 has-[>[data-slot=field-content]]:items-center">
+              <FieldContent>
+                <FieldLabel for="template-status" class="font-semibold">Template Status</FieldLabel>
+                <FieldDescription>Enable or disable this email template</FieldDescription>
+              </FieldContent>
+              <Switch id="template-status" v-model="editingTemplate.is_active" />
+            </Field>
 
             <!-- Subject Field -->
-            <div class="space-y-1.5">
-              <label for="subject" class="block text-sm font-bold text-gray-700">Email Subject</label>
-              <input
+            <Field>
+              <FieldLabel for="subject" class="font-semibold">Email Subject</FieldLabel>
+              <Input
                 id="subject"
                 v-model="editingTemplate.subject"
                 type="text"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all placeholder:text-gray-400"
                 placeholder="Enter email subject"
               />
-            </div>
+            </Field>
 
             <!-- Body Field -->
-            <div class="space-y-1.5">
-              <label for="body" class="block text-sm font-bold text-gray-700">Email Body (HTML)</label>
-              <textarea
+            <Field>
+              <FieldLabel for="body" class="font-semibold">Email Body (HTML)</FieldLabel>
+              <Textarea
                 id="body"
                 v-model="editingTemplate.body"
                 rows="10"
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-1 focus:ring-teal focus:border-teal outline-none transition-all font-mono text-sm resize-none"
+                class="field-sizing-fixed font-mono text-sm"
                 placeholder="Enter email body (HTML supported)"
-              ></textarea>
-              <div class="flex flex-wrap gap-2 pt-2">
+              />
+              <div class="flex flex-wrap gap-2 pt-0.5">
                 <span v-for="tag in ['customer_name', 'customer_email', 'store_name', 'app_name']" :key="tag" 
-                  class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-[10px] font-mono cursor-default hover:bg-gray-200 transition-colors border border-gray-200"
+                  class="px-2 py-1 bg-muted text-muted-foreground rounded-md text-[10px] font-mono cursor-default border"
                   v-text="'{{' + tag + '}}'"
                 >
                 </span>
               </div>
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
 
-          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-            <button @click="closeEditModal" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-all">
+          <DialogFooter class="gap-3">
+            <Button variant="outline" @click="closeEditModal">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               @click="saveTemplate"
               :disabled="saving"
-              class="px-6 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              <LoadingIcon v-if="saving" size="sm" color-class="text-white" />
+              <Spinner v-if="saving" />
               {{ saving ? 'Saving...' : 'Save Template' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Button>
+          </DialogFooter>
+        </template>
+      </DialogContent>
+    </Dialog>
 
     <!-- Preview Modal -->
-    <div v-if="showPreviewModal && previewTemplate" class="fixed inset-0 z-50 overflow-y-auto">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="fixed inset-0 bg-dark/20 backdrop-blur-sm transition-opacity" @click="closePreviewModal"></div>
+    <Dialog :open="showPreviewModal && !!previewTemplate" @update:open="(open) => { if (!open) closePreviewModal(); }">
+      <DialogContent class="sm:max-w-3xl">
+        <template v-if="previewTemplate">
+          <DialogHeader>
+            <DialogTitle>Email Preview</DialogTitle>
+            <DialogDescription>{{ previewTemplate.app_name }} • {{ previewTemplate.template_name }}</DialogDescription>
+          </DialogHeader>
 
-        <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-3xl w-full overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-            <div>
-              <h3 class="text-lg font-bold text-gray-900">Email Preview</h3>
-              <p class="text-xs text-gray-500 mt-0.5">{{ previewTemplate.app_name }} • {{ previewTemplate.template_name }}</p>
-            </div>
-            <button @click="closePreviewModal" class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer p-1">
-              <CloseIcon class="w-6 h-6" />
-            </button>
-          </div>
-
-          <div class="p-6 bg-gray-50/50">
-            <div class="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
-              <div class="bg-white px-6 py-4 border-b border-gray-100">
-                <div class="flex items-start gap-4">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Subject</span>
-                  <div class="text-sm font-bold text-gray-900 flex-1">{{ previewTemplate.subject }}</div>
-                </div>
+          <div class="border rounded-xl overflow-hidden">
+            <div class="px-6 py-4 border-b">
+              <div class="flex items-start gap-4">
+                <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">Subject</span>
+                <div class="text-sm font-semibold text-foreground flex-1">{{ previewTemplate.subject }}</div>
               </div>
+            </div>
 
-              <div class="p-0 bg-gray-100/50 max-h-[600px] overflow-y-auto custom-scrollbar">
-                <!-- Simulated Email Container -->
-                <div class="py-10 px-4 min-h-full flex justify-center">
-                  <div class="bg-white w-full max-w-[600px] rounded-xl border border-gray-200 shadow-xl overflow-hidden">
-                    <div class="p-10">
-                      <div v-html="previewTemplate.body" class="email-preview-content prose prose-sm max-w-none"></div>
-                    </div>
+            <div class="bg-muted/50 max-h-[min(600px,60vh)] overflow-y-auto custom-scrollbar">
+              <!-- Simulated Email Container: stays a white "paper", like a mail client renders it -->
+              <div class="py-10 px-4 min-h-full flex justify-center">
+                <div class="email-paper w-full max-w-[600px] rounded-xl border overflow-hidden">
+                  <div class="p-10">
+                    <div v-html="previewTemplate.body" class="email-preview-content prose prose-sm max-w-none"></div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-            <button @click="closePreviewModal" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-all">
+          <DialogFooter>
+            <Button variant="outline" @click="closePreviewModal">
               Close Preview
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Button>
+          </DialogFooter>
+        </template>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
+/* The preview imitates a mail client, so the email itself keeps a white canvas in every theme. */
+.email-paper { background: #ffffff; }
 .email-preview-content { 
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -500,8 +458,4 @@ const saveTemplate = async () => {
 .email-preview-content :deep(ul), .email-preview-content :deep(ol) { margin-top: 1.25em; margin-bottom: 1.25em; padding-left: 1.625em; }
 .email-preview-content :deep(li) { margin-top: 0.5em; margin-bottom: 0.5em; }
 
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
 </style>

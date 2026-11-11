@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiService } from '@/config/api';
 import type { Installation, PaginatedResponse } from '@/types';
+import { toQuery } from '@/utils/query';
 
 export const useInstallationsStore = defineStore('installations', () => {
   const installations = ref<Installation[]>([]);
@@ -43,19 +44,8 @@ export const useInstallationsStore = defineStore('installations', () => {
       loading.value = true;
       error.value = null;
 
-      const queryParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          if (Array.isArray(value)) {
-            value.forEach(v => queryParams.append(`${key}[]`, String(v)));
-          } else {
-            queryParams.append(key, String(value));
-          }
-        }
-      });
-
       const response = await apiService.get<PaginatedResponse<Installation>>(
-        `/installations?${queryParams.toString()}`
+        `/installations${toQuery(params)}`
       );
       if (requestId !== latestListRequest) return;
 

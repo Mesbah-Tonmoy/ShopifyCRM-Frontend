@@ -1,4 +1,5 @@
 import type { FeatureRequestStatus } from '@/services/featureRequestService';
+import { toQuery } from '@/utils/query';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'https://crm.zapioapps.com/backendapp';
 const API_URL = `${BASE_URL}/api/board`;
@@ -117,22 +118,6 @@ export const boardSession = {
     clear: (slug: string) => sessionStorage.removeItem(sessionKey(slug)),
 };
 
-const toQuery = (filters?: Record<string, unknown>): string => {
-    if (!filters) return '';
-
-    const params = new URLSearchParams();
-
-    Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-            params.append(key, String(value));
-        }
-    });
-
-    const query = params.toString();
-
-    return query ? `?${query}` : '';
-};
-
 /**
  * The board never carries the CRM's admin bearer token. It authenticates only
  * with the board session minted from the app's HMAC-signed token, so an admin
@@ -196,11 +181,11 @@ export const boardService = {
     },
 
     async getRequests(slug: string, filters?: BoardListFilters): Promise<BoardPaginated<BoardRequest>> {
-        return request(`/${slug}/requests${toQuery(filters as Record<string, unknown>)}`, { slug });
+        return request(`/${slug}/requests${toQuery(filters, { skipEmpty: true })}`, { slug });
     },
 
     async getRoadmap(slug: string, sort?: BoardSort): Promise<{ columns: BoardColumn[] }> {
-        return request(`/${slug}/roadmap${toQuery({ sort })}`, { slug });
+        return request(`/${slug}/roadmap${toQuery({ sort }, { skipEmpty: true })}`, { slug });
     },
 
     async getMe(slug: string): Promise<BoardMe> {

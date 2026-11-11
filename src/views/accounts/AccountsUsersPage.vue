@@ -2,12 +2,25 @@
 import { ref, onMounted, computed } from 'vue';
 import { aclService, type User, type Role } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
-import { EditIcon, DeleteIcon, PlusIcon, LoadingIcon, CloseIcon } from '@/components/icons';
+import { Plus, Pencil, Trash2 } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import SearchInput from '@/components/common/SearchInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import Swal from 'sweetalert2';
-import { Toast } from '@/utils/toast';
+import StatusBadge from '@/components/common/StatusBadge.vue';
+import UserAvatar from '@/components/common/UserAvatar.vue';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
+import { errorMessage } from '@/utils/errors';
+import { toggleInList } from '@/lib/list';
 
 const users = ref<User[]>([]);
 const rolesList = ref<Role[]>([]);
@@ -134,52 +147,38 @@ const saveUser = async () => {
     }
 
     if (response.success) {
-      Toast.fire({
-        icon: 'success',
-        title: response.message
-      });
+      toast.success(response.message || 'User saved');
       showModal.value = false;
       fetchUsers();
     }
-  } catch (error: any) {
-    Swal.fire('Error', error.response?.data?.message || 'Failed to save user', 'error');
+  } catch (error) {
+    toast.error('Error', { description: errorMessage(error, 'Failed to save user') });
   } finally {
     isSaving.value = false;
   }
 };
 
 const deleteUser = async (id: number) => {
-  const result = await Swal.fire({
+  const { confirmed } = await confirmDialog({
     title: 'Are you sure?',
-    text: "You won't be able to revert this!",
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#d33',
-    cancelButtonColor: '#6B7280',
-    confirmButtonText: 'Yes, delete it!'
+    description: "You won't be able to revert this!",
+    confirmText: 'Yes, delete it!',
+    destructive: true
   });
 
-  if (result.isConfirmed) {
-    Swal.fire({
-      title: 'Deleting...',
-      text: 'Please wait while we delete the user',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+  if (confirmed) {
+    const loadingId = toast.loading('Deleting...', { description: 'Please wait while we delete the user' });
 
     try {
-      const response = await aclService.deleteUser(id) as any;
+      const response = await aclService.deleteUser(id);
       if (response.success) {
-        Toast.fire({
-          icon: 'success',
-          title: response.message
-        });
+        toast.success(response.message, { id: loadingId, description: undefined });
         fetchUsers();
+      } else {
+        toast.dismiss(loadingId);
       }
-    } catch (error) {
-      Swal.fire('Error', 'Failed to delete user', 'error');
+    } catch {
+      toast.error('Error', { id: loadingId, description: 'Failed to delete user' });
     }
   }
 };
@@ -201,190 +200,191 @@ const generatePassword = () => {
       description="Manage user accounts and assigned roles" 
     />
 
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <!-- Search Bar -->
-        <SearchInput 
-          v-model="searchQuery" 
-          placeholder="Search" 
-          container-class="max-w-[250px] flex-1"
-        />
+    <Card class="mb-6 py-4">
+      <CardContent class="px-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <!-- Search Bar -->
+          <SearchInput 
+            v-model="searchQuery" 
+            placeholder="Search" 
+            container-class="max-w-[250px] flex-1"
+          />
 
-        <!-- Roles and Search Container -->
-        <div class="flex flex-wrap items-center gap-4 flex-1">
-          <!-- Roles Filters -->
-          <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
-            <button 
-              v-for="role in roleFilters" 
-              :key="role.value"
-              @click="selectedRole = role.value"
-              :class="[
-                'px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors border cursor-pointer',
-                selectedRole === role.value 
-                  ? 'bg-teal/5 text-teal border-teal/20' 
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              ]"
+          <!-- Roles and Search Container -->
+          <div class="flex flex-wrap items-center gap-4 flex-1">
+            <!-- Roles Filters -->
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              :spacing="2"
+              :model-value="selectedRole"
+              class="max-w-full overflow-x-auto no-scrollbar pb-1 md:pb-0"
+              @update:model-value="(v) => typeof v === 'string' && v && (selectedRole = v)"
             >
-              {{ role.name }} <span class="ml-1 opacity-60">({{ role.count }})</span>
-            </button>
+              <ToggleGroupItem
+                v-for="role in roleFilters"
+                :key="role.value"
+                :value="role.value"
+              >
+                {{ role.name }} <span class="ml-1 opacity-60">({{ role.count }})</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
+
+          <!-- Add User Button -->
+          <Button
+            v-if="authStore.hasPermission('users.add')"
+            @click="openAddModal"
+          >
+            <Plus />
+            Add New User
+          </Button>
         </div>
+      </CardContent>
+    </Card>
 
-        <!-- Add User Button -->
-        <button 
-          v-if="authStore.hasPermission('users.add')"
-          @click="openAddModal" 
-          class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
-        >
-          <PlusIcon size="sm" />
-          Add New User
-        </button>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-lg border border-gray-200">
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50/50">
-            <tr>
-              <th scope="col" class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Name</th>
-              <th scope="col" class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Email</th>
-              <th scope="col" class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Roles</th>
-              <th scope="col" class="px-6 py-4 text-right text-sm font-semibold text-gray-600">Action</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <template v-if="loading">
-              <tr v-for="i in 5" :key="i">
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center">
-                    <SkeletonLoader width="32px" height="32px" custom-class="rounded-full mr-3" />
-                    <SkeletonLoader width="120px" height="16px" />
-                  </div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <SkeletonLoader width="180px" height="16px" />
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex gap-1">
-                    <SkeletonLoader width="60px" height="24px" custom-class="rounded-full" />
-                    <SkeletonLoader width="70px" height="24px" custom-class="rounded-full" />
-                  </div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right">
-                  <div class="flex items-center justify-end gap-2">
-                    <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
-                    <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
-                  </div>
-                </td>
-              </tr>
-            </template>
-            <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="4" class="px-6 py-4 text-center text-gray-500 italic">No users found match your criteria</td>
-            </tr>
-            <template v-else>
-              <tr v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors">
-              <td class="px-6 py-4 whitespace-nowrap">
+    <Card class="gap-0 overflow-hidden py-0">
+      <Table>
+        <TableHeader class="bg-muted/50">
+          <TableRow>
+            <TableHead class="px-6">Name</TableHead>
+            <TableHead class="px-6">Email</TableHead>
+            <TableHead class="px-6">Roles</TableHead>
+            <TableHead class="px-6 text-right">Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-if="loading">
+            <TableRow v-for="i in 5" :key="i">
+              <TableCell class="px-6 py-4">
                 <div class="flex items-center">
-                  <div class="w-8 h-8 rounded-full bg-teal/10 flex items-center justify-center mr-3 overflow-hidden">
-                    <img v-if="user.image" :src="user.image" :alt="user.name" class="w-full h-full object-cover">
-                    <svg v-else class="w-4 h-4 text-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <div class="text-sm font-medium text-gray-900">{{ user.name }}</div>
+                  <SkeletonLoader width="32px" height="32px" custom-class="rounded-full mr-3" />
+                  <SkeletonLoader width="120px" height="16px" />
                 </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ user.email }}</td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex flex-wrap gap-1">
-                  <span v-for="role in user.roles" :key="role.id" class="p-[4px_12px_6px] bg-blue-50 text-blue-600 text-xs rounded-full">
-                    {{ role.name }}
-                  </span>
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <SkeletonLoader width="180px" height="16px" />
+              </TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="flex gap-1">
+                  <SkeletonLoader width="60px" height="24px" custom-class="rounded-full" />
+                  <SkeletonLoader width="70px" height="24px" custom-class="rounded-full" />
                 </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+              </TableCell>
+              <TableCell class="px-6 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
-                  <button 
-                    v-if="authStore.hasPermission('users.edit')"
-                    @click="openEditModal(user)" 
-                    class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-teal-500 bg-white hover:bg-teal-50 transition-colors gap-1.5"
-                  >
-                    <EditIcon size="md" />Edit
-                  </button>
-                  <button 
-                    v-if="authStore.hasPermission('users.edit')"
-                    @click="user.id && deleteUser(user.id)" 
-                    class="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-red-500 bg-white hover:bg-red-50 transition-colors gap-1.5"
-                  >
-                    <DeleteIcon size="md" />Delete
-                  </button>
+                  <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
+                  <SkeletonLoader width="80px" height="34px" custom-class="rounded-lg" />
                 </div>
-              </td>
-            </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
+              </TableCell>
+            </TableRow>
+          </template>
+          <TableEmpty v-else-if="filteredUsers.length === 0" :colspan="4" class="text-muted-foreground italic">
+            No users found match your criteria
+          </TableEmpty>
+          <template v-else>
+            <TableRow v-for="user in filteredUsers" :key="user.id">
+              <TableCell class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                  <UserAvatar :name="user.name" :image="user.image" class="size-8" />
+                  <div class="text-sm font-medium text-foreground">{{ user.name }}</div>
+                </div>
+              </TableCell>
+              <TableCell class="px-6 py-4 text-sm text-muted-foreground">{{ user.email }}</TableCell>
+              <TableCell class="px-6 py-4">
+                <div class="flex flex-wrap gap-1">
+                  <StatusBadge v-for="role in user.roles" :key="role.id" tone="info">
+                    {{ role.name }}
+                  </StatusBadge>
+                </div>
+              </TableCell>
+              <TableCell class="px-6 py-4 text-right text-sm">
+                <div class="flex items-center justify-end gap-2">
+                  <Button
+                    v-if="authStore.hasPermission('users.edit')"
+                    variant="outline"
+                    size="sm"
+                    @click="openEditModal(user)"
+                  >
+                    <Pencil />Edit
+                  </Button>
+                  <Button
+                    v-if="authStore.hasPermission('users.edit')"
+                    variant="destructive"
+                    size="sm"
+                    @click="user.id && deleteUser(user.id)"
+                  >
+                    <Trash2 />Delete
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </template>
+        </TableBody>
+      </Table>
+    </Card>
 
     <!-- User Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
-      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showModal = false"></div>
+    <Dialog v-model:open="showModal">
+      <DialogContent class="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{{ isEditing ? 'Edit User' : 'Add New User' }}</DialogTitle>
+        </DialogHeader>
 
-      <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
-          <h3 class="text-lg font-bold text-gray-900">{{ isEditing ? 'Edit User' : 'Add New User' }}</h3>
-          <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 cursor-pointer">
-            <CloseIcon size="lg" />
-          </button>
-        </div>
-
-        <form @submit.prevent="saveUser" class="p-6 space-y-5">
-          <div class="space-y-4">
-            <div>
-              <label for="userName" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Full Name</label>
-              <input id="userName" name="name" v-model="currentUser.name" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
-            </div>
-            <div>
-              <label for="userEmail" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Email Address</label>
-              <input id="userEmail" name="email" v-model="currentUser.email" type="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
-            </div>
-            <div v-if="!isEditing">
-              <label for="userPassword" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Password</label>
-              <input id="userPassword" name="password" v-model="currentUser.password" type="text" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
-              <button 
-                type="button" 
-                @click="generatePassword" 
-                class="mt-1 text-xs text-teal hover:text-teal-dark font-medium cursor-pointer"
-              >
-                Generate Password
-              </button>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Roles</label>
-              <div class="grid grid-cols-2 gap-2">
-                <label v-for="role in rolesList" :key="role.id" :for="'role-'+role.id" class="flex items-center space-x-2 text-sm cursor-pointer">
-                  <input type="checkbox" :id="'role-'+role.id" :value="role.id" v-model="currentUser.role_ids" class="rounded text-teal focus:ring-teal">
-                  <span>{{ role.name }}</span>
-                </label>
+        <form @submit.prevent="saveUser" class="space-y-8">
+          <FieldGroup class="gap-4">
+            <Field>
+              <FieldLabel for="userName">Full Name</FieldLabel>
+              <Input id="userName" name="name" v-model="currentUser.name" type="text" required />
+            </Field>
+            <Field>
+              <FieldLabel for="userEmail">Email Address</FieldLabel>
+              <Input id="userEmail" name="email" v-model="currentUser.email" type="email" required />
+            </Field>
+            <Field v-if="!isEditing" class="gap-1.5">
+              <FieldLabel for="userPassword">Password</FieldLabel>
+              <Input id="userPassword" name="password" v-model="currentUser.password" type="text" required />
+              <div>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  class="h-auto p-0"
+                  @click="generatePassword"
+                >
+                  Generate Password
+                </Button>
               </div>
-            </div>
-          </div>
+            </Field>
+            <FieldSet class="gap-3">
+              <FieldLegend variant="label" class="mb-2">Roles</FieldLegend>
+              <div class="grid grid-cols-2 gap-2">
+                <Field v-for="role in rolesList" :key="role.id" orientation="horizontal" class="gap-2">
+                  <Checkbox
+                    :id="'role-'+role.id"
+                    :model-value="currentUser.role_ids?.includes(role.id)"
+                    @update:model-value="(v) => (currentUser.role_ids = toggleInList(currentUser.role_ids ?? [], role.id, v))"
+                  />
+                  <FieldLabel :for="'role-'+role.id" class="font-normal">{{ role.name }}</FieldLabel>
+                </Field>
+              </div>
+            </FieldSet>
+          </FieldGroup>
 
-          <div class="mt-8 flex gap-3">
-            <button type="button" @click="showModal = false" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg transition-all font-medium hover:bg-gray-50">Cancel</button>
-            <button 
-              type="submit" 
+          <DialogFooter>
+            <Button type="button" variant="outline" class="flex-1" @click="showModal = false">Cancel</Button>
+            <Button
+              type="submit"
               :disabled="isSaving || !currentUser.name || !currentUser.email || (!isEditing && !currentUser.password)"
-              class="flex-1 px-4 py-2 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              class="flex-1"
             >
-              <LoadingIcon v-if="isSaving" size="xs" />
+              <Spinner v-if="isSaving" />
               {{ isSaving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update User' : 'Create User') }}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

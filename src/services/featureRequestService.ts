@@ -1,4 +1,6 @@
-import { apiService } from '@/config/api';
+import { apiService, type ApiResponse } from '@/config/api';
+import type { PaginatedResponse } from '@/types';
+import { toQuery } from '@/utils/query';
 
 export type FeatureRequestStatus =
     | 'pending'
@@ -149,52 +151,16 @@ export interface BoardConfig {
     available_statuses: { value: FeatureRequestStatus; label: string }[];
 }
 
-export interface PaginatedResponse<T> {
-    success: boolean;
-    data: {
-        data: T[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
-    };
-}
-
-export interface ApiResponse<T> {
-    success: boolean;
-    message?: string;
-    data: T;
-}
-
-/**
- * Drop empty filters so the query string only carries what was actually set.
- */
-const toQuery = (filters?: Record<string, unknown>): string => {
-    if (!filters) return '';
-
-    const params = new URLSearchParams();
-
-    Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-            params.append(key, String(value));
-        }
-    });
-
-    const query = params.toString();
-
-    return query ? `?${query}` : '';
-};
-
 export const featureRequestService = {
-    async getAll(filters?: FeatureRequestFilters): Promise<PaginatedResponse<FeatureRequest>> {
-        return apiService.get<PaginatedResponse<FeatureRequest>['data']>(
-            `/feature-requests${toQuery(filters as Record<string, unknown>)}`
-        ) as Promise<PaginatedResponse<FeatureRequest>>;
+    async getAll(filters?: FeatureRequestFilters): Promise<ApiResponse<PaginatedResponse<FeatureRequest>>> {
+        return apiService.get<PaginatedResponse<FeatureRequest>>(
+            `/feature-requests${toQuery(filters, { skipEmpty: true })}`
+        );
     },
 
     async getStats(appId?: number | null): Promise<ApiResponse<FeatureRequestStats>> {
         return apiService.get<FeatureRequestStats>(
-            `/feature-requests/stats${toQuery({ app_id: appId })}`
+            `/feature-requests/stats${toQuery({ app_id: appId }, { skipEmpty: true })}`
         );
     },
 

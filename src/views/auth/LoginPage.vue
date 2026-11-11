@@ -4,6 +4,12 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import loginBg from '@/assets/login-bg.jpg';
 import { GoogleIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import AppAlert from '@/components/common/AppAlert.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -42,136 +48,110 @@ const loginWithGoogle = () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center font-sans">
-    <!-- Main Container - More expansive -->
-    <div class="w-full flex min-h-screen">
-      
-      <!-- Left Side: Form with Bottom-Left Gradient -->
-      <div class="w-full md:w-1/2 p-8 md:p-16 flex flex-col justify-center relative overflow-hidden bg-gradient-to-tr from-[#FFF7E6] via-white/50 to-white/20">
-        <!-- Subtle decorative glow in bottom left -->
-        <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-yellow-200/40 rounded-full blur-[80px]"></div>
-        
-        <div class="md:w-[450px] md:mx-auto">
-          <div class="mb-10">
-            <div class="w-[100px] h-[45px] flex bg-white rounded-2xl shadow-sm mb-8 p-1.5">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Shopify_Logo.png" alt="Logo" class="w-full object-contain">
-            </div>
-            <h2 class="text-4xl font-bold text-gray-900 mb-3 tracking-tight">Sign in</h2>
-            <p class="text-gray-500 text-base">Welcome back! Please enter your details.</p>
-          </div>
+  <!-- Full-screen split, as before: the form on the left half, the photo filling the right -->
+  <div class="flex min-h-svh w-full">
+    <!-- Left Side: Form -->
+    <div class="relative flex w-full flex-col justify-center overflow-hidden bg-background p-8 md:w-1/2 md:p-16">
+      <!-- Soft glow in the bottom-left corner, in the theme colour so it works in dark mode -->
+      <div aria-hidden="true" class="pointer-events-none absolute -bottom-24 -left-24 size-64 rounded-full bg-primary/15 blur-[80px]" />
 
-          <form @submit.prevent="handleLogin" class="space-y-6">
-            <div>
-              <label for="email" class="block text-sm font-semibold text-gray-700 mb-2 ml-1">Email</label>
-              <input
+      <!-- Bordered panel around the form -->
+      <div class="relative flex flex-col gap-10 rounded-3xl border bg-card p-8 md:mx-auto md:w-[450px] md:p-10">
+        <div class="flex flex-col gap-3">
+          <!-- Brand logo: needs a light chip to stay legible in both themes -->
+          <div class="mb-5 flex h-[45px] w-[100px] rounded-xl bg-white p-1.5 ring-1 ring-foreground/10">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Shopify_Logo.png" alt="Logo" class="w-full object-contain">
+          </div>
+          <h2 class="font-heading text-2xl font-semibold tracking-tight text-foreground">Sign in</h2>
+          <p class="text-base text-muted-foreground">Welcome back! Please enter your details.</p>
+        </div>
+
+        <form @submit.prevent="handleLogin">
+          <FieldGroup>
+            <Field>
+              <FieldLabel for="email">Email</FieldLabel>
+              <Input
                 id="email"
                 v-model="email"
                 type="email"
                 required
                 placeholder="Enter your email"
                 autocomplete="email"
-                class="w-full px-6 py-4 rounded-2xl border border-gray-200 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all duration-300 bg-white/60 hover:bg-white"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label for="password" class="block text-sm font-semibold text-gray-700 mb-2 ml-1">Password</label>
-              <input
+            <Field>
+              <FieldLabel for="password">Password</FieldLabel>
+              <Input
                 id="password"
                 v-model="password"
                 type="password"
                 required
                 placeholder="••••••••"
                 autocomplete="current-password"
-                class="w-full px-6 py-4 rounded-2xl border border-gray-200 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all duration-300 bg-white/60 hover:bg-white"
               />
-            </div>
+            </Field>
 
             <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <input
-                  id="remember_me"
-                  v-model="rememberMe"
-                  type="checkbox"
-                  class="h-5 w-5 focus:ring-teal border-gray-300 rounded-lg cursor-pointer transition-all duration-200"
-                />
-                <label for="remember_me" class="ml-2.5 block text-sm font-medium text-gray-700 cursor-pointer">
-                  Remember me
-                </label>
-              </div>
+              <Field orientation="horizontal" class="w-auto gap-2.5">
+                <Checkbox id="remember_me" v-model="rememberMe" />
+                <FieldLabel for="remember_me">Remember me</FieldLabel>
+              </Field>
               <div class="text-sm">
-                <a href="#" class="font-semibold hover:text-teal transition-colors">
+                <a href="#" class="font-semibold text-foreground transition-colors hover:text-primary">
                   Forgot password?
                 </a>
               </div>
             </div>
 
-            <div v-if="authStore.error" class="bg-red-50 text-red-600 text-sm p-4 rounded-2xl border border-red-100 animate-fade-in">
+            <AppAlert v-if="authStore.error" tone="danger">
               {{ authStore.error }}
-            </div>
+            </AppAlert>
 
-            <button
+            <Button
               type="submit"
+              size="lg"
+              class="w-full"
               :disabled="authStore.loading || isGoogleLoading"
-              class="w-full py-4 px-4 bg-[#FFD66B] hover:bg-[#FFCC4D] text-gray-900 font-bold text-lg rounded-2xl shadow-xl shadow-yellow-400/20 transition-all duration-300 transform active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="authStore.loading">Signing in...</span>
               <span v-else>Sign In</span>
-            </button>
+            </Button>
 
-            <div class="relative my-8">
-              <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-gray-200"></div>
-              </div>
-              <div class="relative flex justify-center text-sm">
-                <span class="px-4 bg-transparent text-gray-400 font-medium">Or continue with</span>
-              </div>
-            </div>
+            <FieldSeparator class="my-1 *:data-[slot=field-separator-content]:bg-card">
+              Or continue with
+            </FieldSeparator>
 
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="lg"
+              class="w-full"
               @click="loginWithGoogle"
               :disabled="authStore.loading || isGoogleLoading"
-              class="w-full py-4 px-4 bg-white border border-gray-200 text-gray-700 font-bold rounded-2xl shadow-sm hover:bg-gray-50 hover:border-gray-300 flex items-center justify-center gap-3 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <template v-if="isGoogleLoading">
-                <div class="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                <Spinner />
                 Redirecting...
               </template>
               <template v-else>
-                <GoogleIcon size="lg" />
+                <GoogleIcon />
                 Sign in with Google
               </template>
-            </button>
-          </form>
-
-          <!-- <p class="mt-10 text-center text-sm text-gray-500 font-medium">
-            Don't have an account? 
-            <a href="#" class="font-bold text-indigo-600 hover:text-indigo-500 transition-colors">Sign up for free</a>
-          </p> -->
-        </div>
+            </Button>
+          </FieldGroup>
+        </form>
       </div>
+    </div>
 
-      <!-- Right Side: Image/Branding -->
-      <div class="hidden md:block w-1/2 relative">
-        <img :src="loginBg" alt="Shopify CRM" class="absolute inset-0 w-full h-full object-cover">
-        <div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
-        <div class="absolute bottom-16 left-16 right-16 text-white drop-shadow-lg">
-          <h3 class="text-3xl font-extrabold mb-3 leading-tight text-white drop-shadow-md">Shopify CRM</h3>
-          <p class="text-white/90 text-lg font-medium">Streamlined tools for tracking installs, uninstalls, and customer subscriptions across our organization's apps.</p>
-        </div>
+    <!-- Right Side: Image/Branding (text sits on the photo, so it stays white in both themes) -->
+    <div class="relative hidden md:block md:w-1/2">
+      <img :src="loginBg" alt="Shopify CRM" class="absolute inset-0 h-full w-full object-cover">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+      <div class="absolute bottom-16 left-16 right-16 text-white drop-shadow-lg">
+        <h3 class="font-heading mb-3 text-3xl font-semibold leading-tight text-white drop-shadow-md">Shopify CRM</h3>
+        <p class="text-lg font-medium text-white/90">Streamlined tools for tracking installs, uninstalls, and customer subscriptions across our organization's apps.</p>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-/* Custom animations or refinements */
-input::placeholder {
-  color: #94a3b8;
-}
-
-button {
-  transition: transform 0.1s ease-in-out;
-}
-</style>

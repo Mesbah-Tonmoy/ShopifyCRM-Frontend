@@ -1,5 +1,5 @@
 import Echo from 'laravel-echo';
-import Pusher from 'pusher-js';
+import Pusher, { type Channel, type ChannelAuthorizationCallback } from 'pusher-js';
 
 declare global {
     interface Window {
@@ -17,9 +17,9 @@ const echo = new Echo({
     wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
     enabledTransports: ['ws', 'wss'],
-    authorizer: (channel: any) => {
+    authorizer: (channel: Channel) => {
         return {
-            authorize: (socketId: string, callback: any) => {
+            authorize: (socketId: string, callback: ChannelAuthorizationCallback) => {
                 const token = localStorage.getItem('token');
                 fetch(`${import.meta.env.VITE_BACKEND_URL}/api/broadcasting/auth`, {
                     method: 'POST',
@@ -35,10 +35,10 @@ const echo = new Echo({
                 })
                 .then(response => response.json())
                 .then(data => {
-                    callback(false, data);
+                    callback(null, data);
                 })
                 .catch(error => {
-                    callback(true, error);
+                    callback(error, null);
                 });
             }
         };

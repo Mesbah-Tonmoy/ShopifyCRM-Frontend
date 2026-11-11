@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import Swal from 'sweetalert2';
 import {
   mailProviderService,
   type MailProvider,
@@ -10,8 +9,20 @@ import {
 } from '@/services/mailProviderService';
 import type { ApiError } from '@/config/api';
 import { useAuthStore } from '@/stores/auth';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
+import { toneDotClasses, type Tone } from '@/lib/tones';
+import { Check } from '@lucide/vue';
 import { LoadingIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import AppAlert from '@/components/common/AppAlert.vue';
+import SelectInput from '@/components/common/SelectInput.vue';
+import StatusBadge from '@/components/common/StatusBadge.vue';
 import MailProviderLogo from './MailProviderLogo.vue';
 import SesTenantPanel from './SesTenantPanel.vue';
 
@@ -116,14 +127,14 @@ const handleError = (provider: MailProvider, err: ApiError, title: string) => {
       Object.entries(err.errors).map(([k, messages]) => [k.replace(/^config\./, ''), messages[0] ?? '']),
     );
   }
-  Swal.fire({ icon: 'error', title, text: err.message });
+  toast.error(title, { description: err.message });
 };
 
 const save = async (provider: MailProvider, { quiet = false } = {}) => {
   errors.value[provider.key] = {};
   const response = await mailProviderService.save(provider.key, payloadFor(provider));
   applyOverview(response.data, [provider.key]);
-  if (!quiet) Toast.fire({ icon: 'success', title: response.message || 'Saved' });
+  if (!quiet) toast.success(response.message || 'Saved');
 };
 
 const onSave = async () => {
@@ -160,24 +171,21 @@ const onActivate = async () => {
   const provider = selected.value;
   if (!provider) return;
 
-  const confirm = await Swal.fire({
-    icon: 'question',
+  const { confirmed } = await confirmDialog({
     title: `Send all CRM email through ${provider.name}?`,
-    text: active.value
+    description: active.value
       ? `${active.value.name} will stop being used.`
       : 'The default mailer will stop being used.',
-    showCancelButton: true,
-    confirmButtonText: selectedDirty.value ? 'Save and activate' : 'Activate',
-    confirmButtonColor: '#0d9488',
+    confirmText: selectedDirty.value ? 'Save and activate' : 'Activate',
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     busy.value = 'activate';
     if (selectedDirty.value) await save(provider, { quiet: true });
     const response = await mailProviderService.activate(provider.key);
     applyOverview(response.data);
-    Toast.fire({ icon: 'success', title: response.message || `${provider.name} is active` });
+    toast.success(response.message || `${provider.name} is active`);
   } catch (caught) {
     const err = caught as ApiError;
     handleError(provider, err, `Could not activate ${provider.name}`);
@@ -189,240 +197,265 @@ const onActivate = async () => {
 const onDeactivate = async () => {
   if (!active.value) return;
 
-  const confirm = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: `Stop using ${active.value.name}?`,
-    text: `CRM email will go through the default mailer (${overview.value?.fallback.mailer}) instead.`,
-    showCancelButton: true,
-    confirmButtonText: 'Stop using it',
-    confirmButtonColor: '#dc2626',
+    description: `CRM email will go through the default mailer (${overview.value?.fallback.mailer}) instead.`,
+    confirmText: 'Stop using it',
+    destructive: true,
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     busy.value = 'deactivate';
     const response = await mailProviderService.deactivate();
     applyOverview(response.data);
-    Toast.fire({ icon: 'success', title: 'Using the default mailer' });
+    toast.success('Using the default mailer');
   } catch (caught) {
     const err = caught as ApiError;
-    Swal.fire({ icon: 'error', title: 'Could not deactivate', text: err.message });
+    toast.error('Could not deactivate', { description: err.message });
   } finally {
     busy.value = null;
   }
 };
 
-const statusBadge = (provider: MailProvider) => {
-  if (provider.is_active) return { label: 'Active', classes: 'bg-green-50 text-green-700' };
-  if (provider.is_configured) return { label: 'Configured', classes: 'bg-gray-100 text-gray-600' };
-  return { label: 'Not set up', classes: 'bg-gray-50 text-gray-400' };
+const statusBadge = (provider: MailProvider): { label: string; tone: Tone; class?: string } => {
+  if (provider.is_active) return { label: 'Active', tone: 'success' };
+  if (provider.is_configured) return { label: 'Configured', tone: 'neutral' };
+  return { label: 'Not set up', tone: 'neutral', class: 'opacity-70' };
 };
+
+const onProviderPicked = (value: unknown) => {
+  if (typeof value === 'string' && value) selectedKey.value = value;
+};
+
+const setFormValue = (providerKey: string, fieldKey: string, value: string | number) => {
+  const form = forms.value[providerKey];
+  if (form) form[fieldKey] = value;
+};
+
+const selectOptions = (field: MailProviderField) =>
+  (field.options ?? []).map((option) => ({ value: option, label: field.option_labels?.[option] ?? option }));
 
 const secretPlaceholder = (provider: MailProvider, field: MailProviderField) =>
   provider.secrets_set.includes(field.key) ? '•••••••• saved — leave blank to keep' : field.placeholder;
 
 const labelFor = (provider: MailProvider, key: string) =>
   provider.fields.find((f) => f.key === key)?.label ?? key;
-
-const inputClasses =
-  'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal focus:border-transparent disabled:bg-gray-50';
 </script>
 
 <template>
-  <section class="bg-white border border-gray-200 shadow-sm rounded-lg p-6">
-    <div class="mb-4">
-      <h3 class="text-base font-semibold text-dark">Email delivery</h3>
-      <p class="text-sm text-gray-500 mt-1">
+  <Card>
+    <CardHeader>
+      <CardTitle class="font-semibold">Email delivery</CardTitle>
+      <CardDescription>
         Choose the service all CRM email goes through — install, uninstall and follow-up emails, and feature board
         notifications. Only one is active at a time.
-      </p>
-    </div>
+      </CardDescription>
+    </CardHeader>
 
-    <div v-if="loading" class="flex justify-center py-8">
-      <LoadingIcon size="md" />
-    </div>
-
-    <div v-else-if="loadError" class="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-      {{ loadError }}
-      <button type="button" class="underline ml-2" @click="load()">Retry</button>
-    </div>
-
-    <template v-else-if="overview">
-      <!-- What mail goes through right now -->
-      <div
-        class="rounded-lg border px-4 py-3 mb-5 flex flex-wrap items-center justify-between gap-3"
-        :class="active ? 'bg-teal-50 border-teal-200' : 'bg-amber-50 border-amber-200'"
-      >
-        <p class="text-sm text-gray-700">
-          <template v-if="active">
-            Sending through <span class="font-semibold">{{ active.name }}</span>
-            <span v-if="active.config.from_email"> · from {{ active.config.from_email }}</span>
-            <span v-if="active.meta.tenant?.in_use"> · tenant <code>{{ active.meta.tenant.name }}</code></span>
-          </template>
-          <template v-else>
-            No provider is active. Email goes through the default mailer
-            (<code>{{ overview.fallback.mailer }}</code><span v-if="overview.fallback.host"> · {{ overview.fallback.host }}</span>)
-            configured in the backend <code>.env</code>.
-          </template>
-        </p>
-        <button
-          v-if="active && canEdit"
-          type="button"
-          @click="onDeactivate"
-          :disabled="busy !== null"
-          class="text-sm text-gray-600 hover:text-red-700 underline disabled:opacity-50"
-        >
-          Stop using {{ active.name }}
-        </button>
+    <CardContent>
+      <div v-if="loading" class="flex justify-center py-8">
+        <LoadingIcon size="md" />
       </div>
 
-      <!-- Provider list -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" role="tablist" aria-label="Email providers">
-        <button
-          v-for="provider in providers"
-          :key="provider.key"
-          type="button"
-          role="tab"
-          :aria-selected="provider.key === selectedKey"
-          @click="selectedKey = provider.key"
-          class="text-left rounded-lg border p-3 flex items-center gap-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-teal"
-          :class="provider.key === selectedKey ? 'border-teal ring-1 ring-teal bg-white' : 'border-gray-200 hover:border-gray-300 bg-gray-50'"
+      <AppAlert v-else-if="loadError" tone="danger">
+        {{ loadError }}
+        <template #action>
+          <Button type="button" variant="link" size="sm" class="h-auto p-0" @click="load()">Retry</Button>
+        </template>
+      </AppAlert>
+
+      <template v-else-if="overview">
+        <!-- What mail goes through right now -->
+        <AppAlert :tone="active ? 'success' : 'warning'" class="mb-5">
+          <p>
+            <template v-if="active">
+              Sending through <span class="font-semibold">{{ active.name }}</span>
+              <span v-if="active.config.from_email"> · from {{ active.config.from_email }}</span>
+              <span v-if="active.meta.tenant?.in_use"> · tenant <code>{{ active.meta.tenant.name }}</code></span>
+            </template>
+            <template v-else>
+              No provider is active. Email goes through the default mailer
+              (<code>{{ overview.fallback.mailer }}</code><span v-if="overview.fallback.host"> · {{ overview.fallback.host }}</span>)
+              configured in the backend <code>.env</code>.
+            </template>
+          </p>
+          <template v-if="active && canEdit" #action>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              @click="onDeactivate"
+              :disabled="busy !== null"
+              class="h-auto p-0 text-muted-foreground hover:text-destructive"
+            >
+              Stop using {{ active.name }}
+            </Button>
+          </template>
+        </AppAlert>
+
+        <!-- Provider list -->
+        <ToggleGroup
+          type="single"
+          :spacing="3"
+          :model-value="selectedKey ?? undefined"
+          @update:model-value="onProviderPicked"
+          aria-label="Email providers"
+          class="grid w-full grid-cols-1 sm:grid-cols-3 gap-3"
         >
-          <MailProviderLogo :provider-key="provider.key" :size="35" />
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm font-semibold text-dark truncate">
-              {{ provider.name }}<span v-if="isDirty(provider.key)" class="text-amber-600" title="Unsaved changes"> •</span>
+          <ToggleGroupItem
+            v-for="provider in providers"
+            :key="provider.key"
+            :value="provider.key"
+            class="h-auto w-full justify-start gap-3 rounded-lg border bg-muted/50 p-3 text-left hover:bg-muted/50 hover:border-foreground/20 data-[state=on]:border-primary data-[state=on]:bg-card data-[state=on]:ring-1 data-[state=on]:ring-primary"
+          >
+            <MailProviderLogo :provider-key="provider.key" :size="35" />
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <span class="truncate">{{ provider.name }}</span>
+                <span
+                  v-if="isDirty(provider.key)"
+                  class="size-1.5 shrink-0 rounded-full"
+                  :class="toneDotClasses.warning"
+                  title="Unsaved changes"
+                />
+              </span>
+              <StatusBadge :tone="statusBadge(provider).tone" :class="['mt-1', statusBadge(provider).class]">
+                {{ statusBadge(provider).label }}
+              </StatusBadge>
             </span>
-            <span class="inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[11px] font-semibold" :class="statusBadge(provider).classes">
-              {{ statusBadge(provider).label }}
-            </span>
-          </span>
-        </button>
-      </div>
+          </ToggleGroupItem>
+        </ToggleGroup>
 
-      <!-- Selected provider's settings -->
-      <form v-if="selected" class="mt-6" role="tabpanel" @submit.prevent="onSave">
-        <div class="flex items-center gap-3 mb-4">
-          <MailProviderLogo :provider-key="selected.key" :size="32" />
-          <div>
-            <h4 class="text-base font-semibold text-dark">{{ selected.name }}</h4>
-            <p class="text-sm text-gray-500">{{ selected.description }}</p>
-          </div>
-        </div>
-
-        <fieldset
-          v-for="group in (['connection', 'sender'] as const)"
-          :key="group"
-          class="mb-5"
-          :disabled="!canEdit"
-        >
-          <legend class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            {{ group === 'connection' ? 'Connection' : 'Sender' }}
-          </legend>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="field in fieldsIn(selected, group)" :key="field.key">
-              <label :for="`${selected.key}-${field.key}`" class="block text-sm font-medium text-gray-600 mb-1">
-                {{ field.label }}<span v-if="isRequired(selected, field)" class="text-red-500"> *</span>
-              </label>
-
-              <select
-                v-if="field.type === 'select'"
-                :id="`${selected.key}-${field.key}`"
-                v-model="forms[selected.key]![field.key]"
-                :class="[inputClasses, errors[selected.key]?.[field.key] ? 'border-red-400' : 'border-gray-300']"
-              >
-                <option v-for="option in field.options" :key="option" :value="option">
-                  {{ field.option_labels?.[option] ?? option }}
-                </option>
-              </select>
-
-              <input
-                v-else
-                :id="`${selected.key}-${field.key}`"
-                :type="field.type"
-                v-model="forms[selected.key]![field.key]"
-                :placeholder="field.secret ? secretPlaceholder(selected, field) : field.placeholder"
-                :autocomplete="field.secret ? 'new-password' : 'off'"
-                :class="[inputClasses, errors[selected.key]?.[field.key] ? 'border-red-400' : 'border-gray-300']"
-              />
-
-              <p v-if="errors[selected.key]?.[field.key]" class="text-xs text-red-600 mt-1">
-                {{ errors[selected.key]![field.key] }}
-              </p>
-              <p v-else-if="field.help" class="text-xs text-gray-500 mt-1">{{ field.help }}</p>
+        <!-- Selected provider's settings -->
+        <form v-if="selected" class="mt-6" @submit.prevent="onSave">
+          <div class="flex items-center gap-3 mb-4">
+            <MailProviderLogo :provider-key="selected.key" :size="32" />
+            <div>
+              <h4 class="font-heading text-base font-semibold text-foreground">{{ selected.name }}</h4>
+              <p class="text-sm text-muted-foreground">{{ selected.description }}</p>
             </div>
           </div>
-        </fieldset>
 
-        <!-- Connection test outcome -->
-        <div
-          v-if="testResults[selected.key]"
-          class="rounded-lg border px-4 py-3 mb-5 text-sm"
-          :class="testResults[selected.key]!.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'"
-        >
-          <p class="font-medium">{{ testResults[selected.key]!.ok ? '✓' : '✗' }} {{ testResults[selected.key]!.message }}</p>
-          <ul v-if="testResults[selected.key]!.warnings.length" class="mt-2 space-y-0.5 text-amber-800">
-            <li v-for="warning in testResults[selected.key]!.warnings" :key="warning">⚠ {{ warning }}</li>
-          </ul>
-          <p v-if="testResults[selected.key]!.details.max_24_hour_send" class="mt-2 text-xs text-gray-600">
-            Quota: {{ testResults[selected.key]!.details.sent_last_24_hours ?? 0 }} /
-            {{ testResults[selected.key]!.details.max_24_hour_send }} in the last 24h ·
-            {{ testResults[selected.key]!.details.max_send_rate }}/s
-          </p>
-        </div>
+          <FieldSet
+            v-for="group in (['connection', 'sender'] as const)"
+            :key="group"
+            class="mb-5 gap-2"
+            :disabled="!canEdit"
+          >
+            <FieldLegend variant="label" class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {{ group === 'connection' ? 'Connection' : 'Sender' }}
+            </FieldLegend>
 
-        <SesTenantPanel
-          v-if="selected.meta.tenant"
-          class="mb-5"
-          :tenant="selected.meta.tenant"
-          :can-edit="canEdit"
-          :has-unsaved-changes="selectedDirty"
-          @changed="load([])"
-        />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field
+                v-for="field in fieldsIn(selected, group)"
+                :key="field.key"
+                class="gap-1.5"
+                :data-invalid="!!errors[selected.key]?.[field.key]"
+              >
+                <FieldLabel :for="`${selected.key}-${field.key}`">
+                  {{ field.label }}<span v-if="isRequired(selected, field)" class="text-destructive"> *</span>
+                </FieldLabel>
 
-        <div v-if="canEdit" class="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-gray-100">
-          <p v-if="!selected.is_configured && !selectedDirty" class="text-xs text-gray-500 mr-auto">
-            Fill in {{ selected.missing.map((k: string) => labelFor(selected!, k)).join(', ') }} to activate.
-          </p>
-          <p v-else-if="selectedDirty" class="text-xs text-amber-700 mr-auto">Unsaved changes</p>
+                <SelectInput
+                  v-if="field.type === 'select'"
+                  :id="`${selected.key}-${field.key}`"
+                  :model-value="forms[selected.key]![field.key] ?? ''"
+                  @update:model-value="(value) => setFormValue(selected!.key, field.key, value)"
+                  :options="selectOptions(field)"
+                  :invalid="!!errors[selected.key]?.[field.key]"
+                  select-class="w-full"
+                />
 
-          <button
-            type="button"
-            @click="onTest"
-            :disabled="busy !== null"
-            class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
-            title="Checks the connection and credentials. No email is sent."
+                <Input
+                  v-else
+                  :id="`${selected.key}-${field.key}`"
+                  :type="field.type"
+                  v-model="forms[selected.key]![field.key]"
+                  :placeholder="field.secret ? secretPlaceholder(selected, field) : field.placeholder"
+                  :autocomplete="field.secret ? 'new-password' : 'off'"
+                  :aria-invalid="!!errors[selected.key]?.[field.key]"
+                />
+
+                <FieldError v-if="errors[selected.key]?.[field.key]" class="text-xs">
+                  {{ errors[selected.key]![field.key] }}
+                </FieldError>
+                <FieldDescription v-else-if="field.help" class="text-xs">{{ field.help }}</FieldDescription>
+              </Field>
+            </div>
+          </FieldSet>
+
+          <!-- Connection test outcome -->
+          <AppAlert
+            v-if="testResults[selected.key]"
+            class="mb-5"
+            :tone="testResults[selected.key]!.ok ? 'success' : 'danger'"
+            :title="testResults[selected.key]!.message"
           >
-            <LoadingIcon v-if="busy === 'test'" size="xs" />
-            Test connection
-          </button>
-          <button
-            type="submit"
-            :disabled="busy !== null || !selectedDirty"
-            class="px-4 py-2 rounded-lg text-sm font-medium border border-teal text-teal hover:bg-teal-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <LoadingIcon v-if="busy === 'save'" size="xs" />
-            Save
-          </button>
-          <span
-            v-if="selected.is_active"
-            class="px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-700"
-          >
-            ✓ Active
-          </span>
-          <button
-            v-else
-            type="button"
-            @click="onActivate"
-            :disabled="busy !== null"
-            class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <LoadingIcon v-if="busy === 'activate'" size="xs" color-class="text-white" />
-            {{ selectedDirty ? 'Save & activate' : 'Activate' }}
-          </button>
-        </div>
-      </form>
-    </template>
-  </section>
+            <ul v-if="testResults[selected.key]!.warnings.length" class="mt-1.5 space-y-0.5 text-amber-700 dark:text-amber-300">
+              <li v-for="warning in testResults[selected.key]!.warnings" :key="warning">⚠ {{ warning }}</li>
+            </ul>
+            <p v-if="testResults[selected.key]!.details.max_24_hour_send" class="mt-2 text-xs">
+              Quota: {{ testResults[selected.key]!.details.sent_last_24_hours ?? 0 }} /
+              {{ testResults[selected.key]!.details.max_24_hour_send }} in the last 24h ·
+              {{ testResults[selected.key]!.details.max_send_rate }}/s
+            </p>
+          </AppAlert>
+
+          <SesTenantPanel
+            v-if="selected.meta.tenant"
+            class="mb-5"
+            :tenant="selected.meta.tenant"
+            :can-edit="canEdit"
+            :has-unsaved-changes="selectedDirty"
+            @changed="load([])"
+          />
+
+          <div v-if="canEdit" class="flex flex-wrap items-center justify-end gap-2 pt-4 border-t">
+            <p v-if="!selected.is_configured && !selectedDirty" class="text-xs text-muted-foreground mr-auto">
+              Fill in {{ selected.missing.map((k: string) => labelFor(selected!, k)).join(', ') }} to activate.
+            </p>
+            <p v-else-if="selectedDirty" class="text-xs text-amber-700 dark:text-amber-300 mr-auto">Unsaved changes</p>
+
+            <Button
+              type="button"
+              variant="outline"
+              @click="onTest"
+              :disabled="busy !== null"
+              title="Checks the connection and credentials. No email is sent."
+            >
+              <Spinner v-if="busy === 'test'" />
+              Test connection
+            </Button>
+            <Button
+              type="submit"
+              variant="outline"
+              :disabled="busy !== null || !selectedDirty"
+            >
+              <Spinner v-if="busy === 'save'" />
+              Save
+            </Button>
+            <StatusBadge
+              v-if="selected.is_active"
+              tone="success"
+              class="h-9 px-4 text-sm"
+            >
+              <Check />
+              Active
+            </StatusBadge>
+            <Button
+              v-else
+              type="button"
+              @click="onActivate"
+              :disabled="busy !== null"
+            >
+              <Spinner v-if="busy === 'activate'" />
+              {{ selectedDirty ? 'Save & activate' : 'Activate' }}
+            </Button>
+          </div>
+        </form>
+      </template>
+    </CardContent>
+  </Card>
 </template>

@@ -1,6 +1,13 @@
 import echo from './echo';
-import { Toast } from './toast';
+import { toast } from './toast';
 import { PushNotification } from './pushNotification';
+
+/** Payload of the `.app.activity` broadcast (App\Events\WebhookReceived). */
+interface AppActivityEvent {
+    type?: string; // 'install' or 'uninstall'
+    message?: string;
+    shopDomain?: string;
+}
 
 export const initNotificationListener = () => {
     console.log('Initializing notification listener...');
@@ -9,7 +16,7 @@ export const initNotificationListener = () => {
     PushNotification.requestPermission();
     
     echo.private('crm-notifications')
-        .listen('.app.activity', (e: any) => {
+        .listen('.app.activity', (e: AppActivityEvent) => {
             // Extract domain for formatting fallback if missing from payload
             let domain = e.shopDomain;
             if (!domain && e.message) {
@@ -17,9 +24,10 @@ export const initNotificationListener = () => {
                 if (match) domain = match[1];
             }
 
-            let message = e.message || '';
-            if (domain && !message.includes('<b>')) {
-                message = message.replace(domain, `"<b>${domain}</b>"`);
+            // Plain text: both the toast and desktop notifications show markup literally.
+            let message = (e.message || '').replace(/<[^>]*>/g, '');
+            if (domain) {
+                message = message.replace(domain, `"${domain}"`);
             }
 
             let title = 'New activity detected';
@@ -39,7 +47,7 @@ export const initNotificationListener = () => {
                     tag: 'crm-activity'
                 });
             } else {
-                Toast.fire({ icon, title, html: message });
+                toast[icon](title, { description: message });
             }
         });
 };

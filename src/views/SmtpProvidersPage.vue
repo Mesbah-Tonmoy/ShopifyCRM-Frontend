@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import Swal from 'sweetalert2';
 import {
   smtpProviderService,
   type SmtpProvider,
@@ -9,10 +8,29 @@ import {
 } from '@/services/smtpProviderService';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
 import { LoadingIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Empty, EmptyDescription } from '@/components/ui/empty';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
+import StatusBadge from '@/components/common/StatusBadge.vue';
+import AppAlert from '@/components/common/AppAlert.vue';
+import { errorMessage } from '@/utils/errors';
 
 /**
  * Manages the SMTP service a connected app sends its platform mail through —
@@ -166,6 +184,8 @@ const selectedApp = computed(() => appsStore.apps.find((a) => a.id === selectedA
 
 const activeProvider = computed(() => providers.value.find((p) => p.isActive) || null);
 
+const presetOptions = PRESETS.map((preset) => ({ value: preset.key, label: preset.name }));
+
 const presetHint = computed(() => PRESETS.find((p) => p.key === selectedPreset.value)?.hint || null);
 
 onMounted(async () => {
@@ -200,8 +220,8 @@ const fetchProviders = async () => {
     } else {
       loadError.value = response.message || 'Failed to load SMTP providers';
     }
-  } catch (err: any) {
-    loadError.value = err.message || 'Failed to load SMTP providers';
+  } catch (err) {
+    loadError.value = errorMessage(err, 'Failed to load SMTP providers');
   } finally {
     loading.value = false;
   }
@@ -290,7 +310,7 @@ const save = async () => {
   if (selectedAppId.value === null) return;
 
   if (!form.value.key.trim() || !form.value.host.trim()) {
-    Toast.fire({ icon: 'error', title: 'Key and host are required' });
+    toast.error('Key and host are required');
     return;
   }
 
@@ -334,7 +354,7 @@ const save = async () => {
 
   // A brand new provider with no password would authenticate as nobody.
   if (!editing.value && !form.value.password && form.value.username) {
-    Toast.fire({ icon: 'error', title: 'Enter the SMTP password' });
+    toast.error('Enter the SMTP password');
     return;
   }
 
@@ -343,14 +363,14 @@ const save = async () => {
     const response = await smtpProviderService.save(selectedAppId.value, payload);
 
     if (response.success) {
-      Toast.fire({ icon: 'success', title: response.message || 'Provider saved' });
+      toast.success(response.message || 'Provider saved');
       modalOpen.value = false;
       await fetchProviders();
     } else {
-      Swal.fire({ icon: 'error', title: 'Could not save', text: response.message });
+      toast.error('Could not save', { description: response.message });
     }
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Could not save', text: err.message || 'Request failed' });
+  } catch (err) {
+    toast.error('Could not save', { description: errorMessage(err, 'Request failed') });
   } finally {
     saving.value = false;
   }
@@ -366,34 +386,30 @@ const save = async () => {
 const reencrypt = async () => {
   if (selectedAppId.value === null) return;
 
-  const confirmed = await Swal.fire({
-    icon: 'question',
+  const { confirmed } = await confirmDialog({
     title: 'Re-encrypt stored secrets?',
     html: `Rewrites every stored SMTP password and AWS secret under the app's
            <b>current</b> encryption key.
            <br><br>Safe to run more than once. Make sure the app still has the old key in
            <code>SMTP_ENCRYPTION_KEY_PREVIOUS</code>, or secrets sealed under it cannot be read
            and will need re-entering.`,
-    showCancelButton: true,
-    confirmButtonText: 'Re-encrypt',
-    confirmButtonColor: '#0d9488',
+    confirmText: 'Re-encrypt',
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     reencrypting.value = true;
     const response = await smtpProviderService.reencrypt(selectedAppId.value);
 
-    Swal.fire({
-      icon: response.success ? 'success' : 'warning',
-      title: response.success ? 'Re-encrypted' : 'Finished with problems',
-      text: response.message,
-    });
+    toast[response.success ? 'success' : 'warning'](
+      response.success ? 'Re-encrypted' : 'Finished with problems',
+      { description: response.message }
+    );
 
     await fetchProviders();
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Re-encrypt failed', text: err.message || 'Request failed' });
+  } catch (err) {
+    toast.error('Re-encrypt failed', { description: errorMessage(err, 'Request failed') });
   } finally {
     reencrypting.value = false;
   }
@@ -402,29 +418,26 @@ const reencrypt = async () => {
 const activate = async (provider: SmtpProvider) => {
   if (selectedAppId.value === null || provider.isActive) return;
 
-  const confirmed = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: `Send all mail through ${provider.name}?`,
-    text: `${selectedApp.value?.app_name || 'The app'} will use this service for every system email and every merchant on the default sender. Test the connection first if you have not.`,
-    showCancelButton: true,
-    confirmButtonText: 'Make it active',
-    confirmButtonColor: '#0d9488',
+    description: `${selectedApp.value?.app_name || 'The app'} will use this service for every system email and every merchant on the default sender. Test the connection first if you have not.`,
+    confirmText: 'Make it active',
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     busyId.value = provider.id;
     const response = await smtpProviderService.activate(selectedAppId.value, provider.id);
 
     if (response.success) {
-      Toast.fire({ icon: 'success', title: response.message || 'Activated' });
+      toast.success(response.message || 'Activated');
       await fetchProviders();
     } else {
-      Swal.fire({ icon: 'error', title: 'Could not activate', text: response.message });
+      toast.error('Could not activate', { description: response.message });
     }
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Could not activate', text: err.message || 'Request failed' });
+  } catch (err) {
+    toast.error('Could not activate', { description: errorMessage(err, 'Request failed') });
   } finally {
     busyId.value = null;
   }
@@ -438,15 +451,21 @@ const test = async (provider: SmtpProvider) => {
     const response = await smtpProviderService.test(selectedAppId.value, provider.id);
 
     // The connection result comes back as success:false, not as an exception.
-    Swal.fire({
-      icon: response.success ? 'success' : 'error',
-      title: response.success ? 'Connection succeeded' : 'Connection failed',
-      text: response.message,
-    });
+    if (response.success) {
+      toast.success('Connection succeeded', { description: response.message });
+    } else {
+      // SMTP errors are long and need reading, so they stay on screen until dismissed.
+      await confirmDialog({
+        title: 'Connection failed',
+        description: response.message || 'The server rejected the connection.',
+        cancelText: false,
+        confirmText: 'OK',
+      });
+    }
 
     await fetchProviders();
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Test failed', text: err.message || 'Request failed' });
+  } catch (err) {
+    toast.error('Test failed', { description: errorMessage(err, 'Request failed') });
   } finally {
     busyId.value = null;
   }
@@ -455,34 +474,32 @@ const test = async (provider: SmtpProvider) => {
 const remove = async (provider: SmtpProvider) => {
   if (selectedAppId.value === null) return;
 
-  const confirmed = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: `Delete ${provider.name}?`,
-    text: provider.isActive
+    description: provider.isActive
       ? 'This is the active service. Deleting it drops the app back to its environment SMTP config until you activate another provider.'
       : 'The stored credentials will be removed.',
-    showCancelButton: true,
-    confirmButtonText: 'Delete',
-    confirmButtonColor: '#dc2626',
+    confirmText: 'Delete',
+    destructive: true,
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     busyId.value = provider.id;
     const response = await smtpProviderService.remove(selectedAppId.value, provider.id);
 
     if (response.success) {
-      Toast.fire({ icon: 'success', title: 'Provider deleted' });
+      toast.success('Provider deleted');
       if (response.data?.wasActive) {
-        Swal.fire({ icon: 'info', title: 'Fell back to environment config', text: response.message });
+        toast.info('Fell back to environment config', { description: response.message });
       }
       await fetchProviders();
     } else {
-      Swal.fire({ icon: 'error', title: 'Could not delete', text: response.message });
+      toast.error('Could not delete', { description: response.message });
     }
-  } catch (err: any) {
-    Swal.fire({ icon: 'error', title: 'Could not delete', text: err.message || 'Request failed' });
+  } catch (err) {
+    toast.error('Could not delete', { description: errorMessage(err, 'Request failed') });
   } finally {
     busyId.value = null;
   }
@@ -501,216 +518,202 @@ const formatDate = (value: string | null) => {
       description="Choose which SMTP service a connected app sends its platform email through"
     >
       <template #actions>
-        <button
+        <Button
           v-if="canEdit && selectedAppId !== null"
           @click="openAdd"
-          class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all"
         >
           Add SMTP service
-        </button>
+        </Button>
       </template>
     </PageHeader>
 
     <!-- App picker -->
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6 flex flex-wrap items-center gap-4">
-      <SelectInput v-model="selectedAppId" label="App" placeholder="Select App" select-class="w-64">
-        <option v-for="app in appsStore.apps" :key="app.id" :value="app.id">
-          {{ app.app_name }}
-        </option>
-      </SelectInput>
+    <Card size="sm" class="mb-6">
+      <CardContent class="flex flex-wrap items-center gap-4">
+        <SelectInput v-model="selectedAppId" :options="appsStore.appOptions" label="App" placeholder="Select App" select-class="w-64" />
 
-      <button
-        v-if="selectedAppId !== null"
-        @click="fetchProviders"
-        :disabled="loading"
-        class="text-sm text-gray-600 hover:text-dark underline disabled:opacity-50"
-      >
-        Refresh
-      </button>
-    </div>
+        <Button
+          v-if="selectedAppId !== null"
+          variant="link"
+          @click="fetchProviders"
+          :disabled="loading"
+          class="h-auto p-0"
+        >
+          Refresh
+        </Button>
+      </CardContent>
+    </Card>
 
-    <div v-if="selectedAppId === null" class="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-      Select an app to manage its SMTP services.
-    </div>
+    <Empty v-if="selectedAppId === null" class="border bg-card p-8">
+      <EmptyDescription>Select an app to manage its SMTP services.</EmptyDescription>
+    </Empty>
 
     <div v-else-if="loading" class="flex justify-center py-12">
       <LoadingIcon size="md" />
     </div>
 
-    <div v-else-if="loadError" class="bg-red-50 border border-red-200 rounded-lg p-6">
-      <h3 class="text-base font-semibold text-red-800">Could not reach the app</h3>
-      <p class="text-sm text-red-700 mt-1">{{ loadError }}</p>
-      <p class="text-sm text-red-700 mt-2">
+    <AppAlert v-else-if="loadError" tone="danger" title="Could not reach the app" class="p-6">
+      <p>{{ loadError }}</p>
+      <p>
         The SMTP settings live in the app's own database, so this page needs the app to be online.
         Check that its URL is correct and that the CRM's <code>WEBHOOK_SECRET</code> matches the
         app's <code>CRM_WEBHOOK_SECRET</code>.
       </p>
-    </div>
+    </AppAlert>
 
     <div v-else class="flex flex-col gap-5 max-w-4xl">
       <!-- What the app is sending through right now -->
-      <div
+      <AppAlert
         v-if="status"
-        class="rounded-lg border p-5"
-        :class="status.source === 'db' ? 'bg-teal-50 border-teal-200' : 'bg-amber-50 border-amber-200'"
+        :tone="status.source === 'db' ? 'success' : 'warning'"
+        title="Currently sending through"
+        class="p-5"
       >
-        <h3 class="text-sm font-semibold text-dark">Currently sending through</h3>
-
-        <p v-if="status.source === 'db'" class="text-sm text-gray-700 mt-1">
+        <p v-if="status.source === 'db'">
           <span class="font-medium">{{ activeProvider?.name || status.activeKey }}</span>
           at {{ status.host }}<span v-if="status.fromEmail"> · from {{ status.fromEmail }}</span>
           <span v-if="status.configurationSet"> · config set {{ status.configurationSet }}</span>
         </p>
 
-        <p v-else-if="status.source === 'env'" class="text-sm text-gray-700 mt-1">
+        <p v-else-if="status.source === 'env'">
           The app's <span class="font-medium">environment config</span> ({{ status.host }}) — no
           provider below is active, so it is using its own <code>SMTP_*</code> /
           <code>MAILTRAP_*</code> variables.
         </p>
 
-        <p v-else class="text-sm text-red-700 mt-1">
+        <p v-else class="text-destructive">
           Nothing. No provider is active and the app has no environment SMTP config, so platform
           email is not being sent.
         </p>
 
         <div v-if="status.chain && status.chain.length > 1" class="mt-3">
-          <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Failover order</p>
-          <ol class="text-sm text-gray-700 mt-1 space-y-0.5">
+          <p class="text-xs font-semibold uppercase tracking-wide">Failover order</p>
+          <ol class="mt-1 space-y-0.5">
             <li v-for="(hop, i) in status.chain" :key="hop.key + i">
               {{ i + 1 }}. {{ hop.name }}
-              <span class="text-gray-400">({{ hop.host }})</span>
-              <span v-if="hop.source === 'env'" class="text-xs text-gray-500">— environment config</span>
+              <span class="text-muted-foreground">({{ hop.host }})</span>
+              <span v-if="hop.source === 'env'" class="text-xs text-muted-foreground">— environment config</span>
             </li>
           </ol>
-          <p class="text-xs text-gray-500 mt-1">
+          <p class="text-xs text-muted-foreground mt-1">
             A send that fails for a transport reason — connection, credentials, throttling — is
             retried on the next entry. A rejected recipient is not retried.
           </p>
         </div>
 
-        <p v-if="!status.encryptionConfigured" class="text-sm text-red-700 mt-3">
+        <p v-if="!status.encryptionConfigured" class="text-destructive mt-3">
           The app cannot encrypt credentials: neither <code>SMTP_ENCRYPTION_KEY</code> nor
           <code>SHOPIFY_API_SECRET</code> is set. Saving a password will fail until one is.
         </p>
 
-        <div v-if="status.encryption" class="mt-4 pt-3 border-t border-gray-200">
+        <div v-if="status.encryption" class="mt-4 pt-3 border-t">
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              <p class="text-xs font-semibold uppercase tracking-wide">
                 Credential encryption
               </p>
-              <p class="text-sm text-gray-700 mt-1">
+              <p class="mt-1">
                 Key <code>{{ status.encryption.currentKeyId || 'none' }}</code>
-                <span class="text-gray-400">·</span>
+                <span class="text-muted-foreground">·</span>
                 {{ status.encryption.sealedCurrent }} secret(s) current
                 <template v-if="status.encryption.sealedStale">
-                  <span class="text-gray-400">·</span>
-                  <span class="text-amber-700">
+                  <span class="text-muted-foreground">·</span>
+                  <span class="text-amber-700 dark:text-amber-300">
                     {{ status.encryption.sealedStale }} under an older key
                   </span>
                 </template>
                 <template v-if="status.encryption.unreadable">
-                  <span class="text-gray-400">·</span>
-                  <span class="text-red-700">
+                  <span class="text-muted-foreground">·</span>
+                  <span class="text-destructive">
                     {{ status.encryption.unreadable }} unreadable
                   </span>
                 </template>
               </p>
 
-              <p v-if="status.encryption.usingLegacyKey" class="text-xs text-amber-700 mt-1">
+              <p v-if="status.encryption.usingLegacyKey" class="text-xs text-amber-700 dark:text-amber-300 mt-1">
                 Using <code>SHOPIFY_API_SECRET</code> as the encryption key. Set a dedicated
                 <code>SMTP_ENCRYPTION_KEY</code> — sharing one secret means one leak costs both.
               </p>
 
-              <p v-else-if="status.encryption.sealedStale" class="text-xs text-gray-600 mt-1">
+              <p v-else-if="status.encryption.sealedStale" class="text-xs text-muted-foreground mt-1">
                 A rotation is in progress. Re-encrypt, then remove
                 <code>SMTP_ENCRYPTION_KEY_PREVIOUS</code> once this reaches zero.
               </p>
 
-              <p v-else-if="status.encryption.unreadable" class="text-xs text-red-700 mt-1">
+              <p v-else-if="status.encryption.unreadable" class="text-xs text-destructive mt-1">
                 No configured key opens these. Re-enter those credentials, or restore the key that
                 sealed them to <code>SMTP_ENCRYPTION_KEY_PREVIOUS</code>.
               </p>
             </div>
 
-            <button
+            <Button
               v-if="canEdit && (status.encryption.sealedStale || status.encryption.unreadable)"
+              variant="outline"
+              size="sm"
               @click="reencrypt"
               :disabled="reencrypting"
-              class="text-sm px-3 py-1.5 rounded-lg border border-teal text-teal hover:bg-teal-50 disabled:opacity-40 flex items-center gap-2 flex-shrink-0"
+              class="shrink-0"
             >
-              <LoadingIcon v-if="reencrypting" size="xs" />
+              <Spinner v-if="reencrypting" />
               Re-encrypt secrets
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </AppAlert>
 
-      <div
-        v-if="!providers.length"
-        class="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500"
-      >
-        No SMTP services configured for {{ selectedApp?.app_name }} yet.
-        <span v-if="canEdit">Add one to take it off the environment fallback.</span>
-      </div>
+      <Empty v-if="!providers.length" class="border bg-card p-8">
+        <EmptyDescription>
+          No SMTP services configured for {{ selectedApp?.app_name }} yet.
+          <span v-if="canEdit">Add one to take it off the environment fallback.</span>
+        </EmptyDescription>
+      </Empty>
 
       <!-- Provider list -->
-      <div
+      <Card
         v-for="provider in providers"
         :key="provider.id"
-        class="bg-white border rounded-lg p-5 shadow-sm"
-        :class="provider.isActive ? 'border-teal ring-1 ring-teal' : 'border-gray-200'"
+        :class="provider.isActive ? 'ring-2 ring-primary' : ''"
       >
-        <div class="flex items-start justify-between gap-4">
+        <CardContent class="flex items-start justify-between gap-4">
           <div class="min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-base font-semibold text-dark">{{ provider.name }}</h3>
-              <span
-                v-if="provider.isActive"
-                class="text-xs font-medium px-2 py-0.5 rounded-full bg-teal text-white"
-              >
-                Active
-              </span>
-              <span
-                v-if="!provider.isEnabled"
-                class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
-              >
-                Disabled
-              </span>
-              <span class="text-xs text-gray-400 font-mono">{{ provider.key }}</span>
-              <span v-if="!provider.isActive && provider.isEnabled" class="text-xs text-gray-500">
+              <CardTitle class="font-heading font-semibold">{{ provider.name }}</CardTitle>
+              <StatusBadge v-if="provider.isActive" tone="success">Active</StatusBadge>
+              <StatusBadge v-if="!provider.isEnabled">Disabled</StatusBadge>
+              <span class="text-xs text-muted-foreground font-mono">{{ provider.key }}</span>
+              <span v-if="!provider.isActive && provider.isEnabled" class="text-xs text-muted-foreground">
                 fallback #{{ provider.priority }}
               </span>
             </div>
 
-            <p class="text-sm text-gray-600 mt-1">
+            <p class="text-sm text-muted-foreground mt-1">
               {{ provider.host }}:{{ provider.port }}
-              <span class="text-gray-400">·</span>
+              <span>·</span>
               {{ provider.secure ? 'TLS' : 'STARTTLS' }}
               <template v-if="provider.username">
-                <span class="text-gray-400">·</span> {{ provider.username }}
+                <span>·</span> {{ provider.username }}
               </template>
-              <span class="text-gray-400">·</span>
-              <span :class="provider.hasPassword ? 'text-gray-600' : 'text-red-600'">
+              <span>·</span>
+              <span :class="provider.hasPassword ? '' : 'text-destructive'">
                 {{ provider.hasPassword ? 'password set' : 'no password' }}
               </span>
             </p>
 
-            <p v-if="provider.fromEmail" class="text-sm text-gray-500 mt-1">
+            <p v-if="provider.fromEmail" class="text-sm text-muted-foreground mt-1">
               From: {{ provider.fromName ? `${provider.fromName} <${provider.fromEmail}>` : provider.fromEmail }}
-              <span v-if="provider.extra?.overrideFrom" class="text-xs text-gray-400">
+              <span v-if="provider.extra?.overrideFrom" class="text-xs">
                 (overrides the app's own sender)
               </span>
             </p>
 
-            <p v-if="provider.configurationSet" class="text-sm text-gray-500 mt-1">
+            <p v-if="provider.configurationSet" class="text-sm text-muted-foreground mt-1">
               Config set: <span class="font-mono">{{ provider.configurationSet }}</span>
             </p>
 
             <p
               v-if="provider.lastTestStatus"
               class="text-xs mt-2"
-              :class="provider.lastTestStatus === 'success' ? 'text-green-700' : 'text-red-600'"
+              :class="provider.lastTestStatus === 'success' ? 'text-emerald-700 dark:text-emerald-300' : 'text-destructive'"
             >
               Last test {{ provider.lastTestStatus }} · {{ formatDate(provider.lastTestedAt) }}
               <span v-if="provider.lastTestError"> — {{ provider.lastTestError }}</span>
@@ -720,343 +723,316 @@ const formatDate = (value: string | null) => {
           <div v-if="canEdit" class="flex items-center gap-2 flex-shrink-0">
             <LoadingIcon v-if="busyId === provider.id" size="xs" />
 
-            <button
+            <Button
               v-if="!provider.isActive"
+              variant="outline"
+              size="sm"
               @click="activate(provider)"
               :disabled="busyId !== null || !provider.isEnabled"
-              class="text-sm px-3 py-1.5 rounded-lg border border-teal text-teal hover:bg-teal-50 disabled:opacity-40"
               :title="provider.isEnabled ? '' : 'Enable this provider before activating it'"
             >
               Activate
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               @click="test(provider)"
               :disabled="busyId !== null"
-              class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
             >
               Test
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               @click="openEdit(provider)"
               :disabled="busyId !== null"
-              class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
             >
               Edit
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="destructive"
+              size="sm"
               @click="remove(provider)"
               :disabled="busyId !== null"
-              class="text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40"
             >
               Delete
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
 
     <!-- Add / edit form -->
-    <div
-      v-if="modalOpen"
-      class="fixed inset-0 bg-black/40 flex items-start justify-center overflow-y-auto py-10 px-4 z-50"
-      @click.self="modalOpen = false"
-    >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
-        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-dark">
+    <Dialog v-model:open="modalOpen">
+      <DialogContent class="sm:max-w-2xl max-h-[85vh] overflow-y-auto" :aria-describedby="undefined">
+        <DialogHeader>
+          <DialogTitle>
             {{ editing ? `Edit ${editing.name}` : 'Add SMTP service' }}
-          </h2>
-          <button @click="modalOpen = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none">
-            &times;
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
-        <div class="px-6 py-5 space-y-4">
-          <div v-if="!editing">
-            <label class="block text-sm font-medium text-gray-600 mb-1">Start from</label>
-            <select
-              :value="selectedPreset"
-              @change="applyPreset(($event.target as HTMLSelectElement).value)"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-            >
-              <option v-for="preset in PRESETS" :key="preset.key" :value="preset.key">
-                {{ preset.name }}
-              </option>
-            </select>
-            <p v-if="presetHint" class="text-xs text-gray-500 mt-1">{{ presetHint }}</p>
-          </div>
+        <div class="space-y-4">
+          <Field v-if="!editing">
+            <FieldLabel for="smtp-preset">Start from</FieldLabel>
+            <SelectInput
+              id="smtp-preset"
+              :model-value="selectedPreset"
+              :options="presetOptions"
+              select-class="w-full"
+              @update:model-value="applyPreset"
+            />
+            <FieldDescription v-if="presetHint" class="text-xs">{{ presetHint }}</FieldDescription>
+          </Field>
 
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Key <span class="text-red-500">*</span></label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-key">Key <span class="text-destructive">*</span></FieldLabel>
+              <Input
+                id="smtp-key"
                 v-model="form.key"
                 :disabled="!!editing"
                 placeholder="mailtrap"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal disabled:bg-gray-50"
+                class="font-mono"
               />
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldDescription class="text-xs">
                 Lowercase slug used in the app's logs. Cannot be changed later.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Display name</label>
-              <input
-                v-model="form.name"
-                placeholder="Mailtrap"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-              />
-            </div>
+            <Field>
+              <FieldLabel for="smtp-name">Display name</FieldLabel>
+              <Input id="smtp-name" v-model="form.name" placeholder="Mailtrap" />
+            </Field>
           </div>
 
           <div class="grid grid-cols-3 gap-4">
-            <div class="col-span-2">
-              <label class="block text-sm font-medium text-gray-600 mb-1">Host <span class="text-red-500">*</span></label>
-              <input
-                v-model="form.host"
-                placeholder="live.smtp.mailtrap.io"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-              />
-            </div>
+            <Field class="col-span-2">
+              <FieldLabel for="smtp-host">Host <span class="text-destructive">*</span></FieldLabel>
+              <Input id="smtp-host" v-model="form.host" placeholder="live.smtp.mailtrap.io" />
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Port</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-port">Port</FieldLabel>
+              <Input
+                id="smtp-port"
                 v-model.number="form.port"
                 type="number"
                 min="1"
                 max="65535"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
               />
-            </div>
+            </Field>
           </div>
 
-          <label class="flex items-center gap-2 text-sm text-gray-700">
-            <input v-model="form.secure" type="checkbox" class="rounded border-gray-300 text-teal focus:ring-teal" />
-            Implicit TLS (use for port 465; leave off for STARTTLS on 587)
-          </label>
+          <Field orientation="horizontal">
+            <Checkbox id="smtp-secure" v-model="form.secure" />
+            <FieldLabel for="smtp-secure" class="font-normal">
+              Implicit TLS (use for port 465; leave off for STARTTLS on 587)
+            </FieldLabel>
+          </Field>
 
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Username</label>
-              <input
-                v-model="form.username"
-                autocomplete="off"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-              />
-            </div>
+            <Field>
+              <FieldLabel for="smtp-username">Username</FieldLabel>
+              <Input id="smtp-username" v-model="form.username" autocomplete="off" />
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Password</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-password">Password</FieldLabel>
+              <Input
+                id="smtp-password"
                 v-model="form.password"
                 type="password"
                 autocomplete="new-password"
                 :placeholder="editing?.hasPassword ? 'Leave blank to keep the stored password' : ''"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
               />
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldDescription class="text-xs">
                 Stored encrypted in the app's database and never shown again.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">From email</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-from-email">From email</FieldLabel>
+              <Input
+                id="smtp-from-email"
                 v-model="form.fromEmail"
                 type="email"
                 placeholder="support@axilweb.com"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">From name</label>
-              <input
-                v-model="form.fromName"
-                placeholder="FormCRM"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-              />
-            </div>
+            <Field>
+              <FieldLabel for="smtp-from-name">From name</FieldLabel>
+              <Input id="smtp-from-name" v-model="form.fromName" placeholder="FormCRM" />
+            </Field>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">Reply-To</label>
-            <input
-              v-model="form.replyTo"
-              type="email"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
-            />
-            <p class="text-xs text-gray-500 mt-1">Used only when the app does not set one itself.</p>
-          </div>
+          <Field>
+            <FieldLabel for="smtp-reply-to">Reply-To</FieldLabel>
+            <Input id="smtp-reply-to" v-model="form.replyTo" type="email" />
+            <FieldDescription class="text-xs">Used only when the app does not set one itself.</FieldDescription>
+          </Field>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-600 mb-1">SES configuration set</label>
-            <input
+          <Field>
+            <FieldLabel for="smtp-configuration-set">SES configuration set</FieldLabel>
+            <Input
+              id="smtp-configuration-set"
               v-model="form.configurationSet"
               placeholder="my-config-set"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal"
+              class="font-mono"
             />
-            <p class="text-xs text-gray-500 mt-1">
+            <FieldDescription class="text-xs">
               Amazon SES only. Sent as the <code>X-SES-CONFIGURATION-SET</code> header, which is
               what turns on SES event publishing (bounces, complaints, deliveries) and any
               dedicated IP pool for this traffic. Leave blank for non-SES services.
-            </p>
-          </div>
+            </FieldDescription>
+          </Field>
 
-          <label class="flex items-start gap-2 text-sm text-gray-700">
-            <input
-              v-model="form.overrideFrom"
-              type="checkbox"
-              class="mt-0.5 rounded border-gray-300 text-teal focus:ring-teal"
-            />
-            <span>
-              Force the From email above
-              <span class="block text-xs text-gray-500">
+          <Field orientation="horizontal">
+            <Checkbox id="smtp-override-from" v-model="form.overrideFrom" />
+            <FieldContent>
+              <FieldLabel for="smtp-override-from" class="font-normal">Force the From email above</FieldLabel>
+              <FieldDescription class="text-xs">
                 By default the app's own sender address wins. Turn this on when the service only
                 accepts senders on its own verified domain.
-              </span>
-            </span>
-          </label>
+              </FieldDescription>
+            </FieldContent>
+          </Field>
 
-          <div class="border-t border-gray-200 pt-4 space-y-4">
+          <FieldSet class="border-t pt-4 gap-4">
             <div>
-              <h3 class="text-sm font-semibold text-dark">Amazon SES tenant management</h3>
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldLegend variant="label" class="font-semibold">Amazon SES tenant management</FieldLegend>
+              <FieldDescription class="text-xs mt-1">
                 Optional, SES only. Gives each Shopify store its own SES tenant, so one store's
                 bounce rate cannot pause the whole account. Tenant operations are SES
                 <b>API</b> calls and need an IAM key pair &mdash; the SMTP credentials above cannot
                 call the API. Tenants are region-scoped, so fill this in for every region.
-              </p>
+              </FieldDescription>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-600 mb-1">AWS region</label>
-                <input
-                  v-model="form.awsRegion"
-                  placeholder="us-west-1"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal"
-                />
-              </div>
+              <Field>
+                <FieldLabel for="smtp-aws-region">AWS region</FieldLabel>
+                <Input id="smtp-aws-region" v-model="form.awsRegion" placeholder="us-west-1" class="font-mono" />
+              </Field>
 
-              <div>
-                <label class="block text-sm font-medium text-gray-600 mb-1">Access key ID</label>
-                <input
+              <Field>
+                <FieldLabel for="smtp-aws-access-key">Access key ID</FieldLabel>
+                <Input
+                  id="smtp-aws-access-key"
                   v-model="form.awsAccessKeyId"
                   autocomplete="off"
                   placeholder="AKIA..."
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal"
+                  class="font-mono"
                 />
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Secret access key</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-aws-secret">Secret access key</FieldLabel>
+              <Input
+                id="smtp-aws-secret"
                 v-model="form.awsSecretAccessKey"
                 type="password"
                 autocomplete="new-password"
                 :placeholder="editing?.hasAwsSecret ? 'Leave blank to keep the stored secret' : ''"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
               />
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldDescription class="text-xs">
                 Needs ses:CreateTenant, ses:CreateTenantResourceAssociation, ses:GetTenant and
                 ses:UpdateReputationEntityCustomerManagedStatus. Stored encrypted.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Identity ARN</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-identity-arn">Identity ARN</FieldLabel>
+              <Input
+                id="smtp-identity-arn"
                 v-model="form.sesIdentityArn"
                 :placeholder="editing?.hasIdentityArn ? 'Stored — leave blank to keep it' : 'arn:aws:ses:us-west-1:123456789012:identity/axilweb.com'"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal"
+                class="font-mono"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Configuration set ARN</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-configuration-set-arn">Configuration set ARN</FieldLabel>
+              <Input
+                id="smtp-configuration-set-arn"
                 v-model="form.sesConfigurationSetArn"
                 :placeholder="editing?.hasConfigurationSetArn ? 'Stored — leave blank to keep it' : 'arn:aws:ses:us-west-1:123456789012:configuration-set/my-config-set'"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal"
+                class="font-mono"
               />
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldDescription class="text-xs">
                 Both ARNs are associated with every tenant. SES rejects a tenant send when the
                 identity or configuration set is not associated, so leaving these blank creates
                 tenants that cannot send.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <p class="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <AppAlert tone="neutral">
               Filling these in makes this provider <b>tenant-required</b>: every send names a
               tenant via <code>X-SES-TENANT</code>. There is no on/off switch, because the
               configuration set uses suppression scope <code>TENANT</code> and SES rejects
               untenanted mail with <code>554 Tenant name is required</code> &mdash; so "off" would
               only mean "no email at all".
-            </p>
-          </div>
+            </AppAlert>
+          </FieldSet>
 
-          <div class="border-t border-gray-200 pt-4 space-y-3">
-            <label class="flex items-center gap-2 text-sm text-gray-700">
-              <input v-model="form.isEnabled" type="checkbox" class="rounded border-gray-300 text-teal focus:ring-teal" />
-              Enabled (a disabled service cannot be activated)
-            </label>
+          <div class="border-t pt-4 space-y-3">
+            <Field orientation="horizontal">
+              <Checkbox id="smtp-enabled" v-model="form.isEnabled" />
+              <FieldLabel for="smtp-enabled" class="font-normal">
+                Enabled (a disabled service cannot be activated)
+              </FieldLabel>
+            </Field>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">Failover priority</label>
-              <input
+            <Field>
+              <FieldLabel for="smtp-priority">Failover priority</FieldLabel>
+              <Input
+                id="smtp-priority"
                 v-model.number="form.priority"
                 type="number"
                 min="0"
                 max="9999"
-                class="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+                class="w-32"
               />
-              <p class="text-xs text-gray-500 mt-1">
+              <FieldDescription class="text-xs">
                 Order this service is tried in when the active one fails: lower goes first. The
                 active service is always attempted before any of these, whatever its own number.
-              </p>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <label class="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                v-model="form.isActive"
-                type="checkbox"
-                :disabled="!form.isEnabled"
-                class="rounded border-gray-300 text-teal focus:ring-teal disabled:opacity-40"
-              />
-              Make this the active service on save
-              <span v-if="activeProvider && !form.isActive" class="text-xs text-gray-500">
-                (replaces {{ activeProvider.name }})
-              </span>
-            </label>
+            <Field orientation="horizontal" :data-disabled="!form.isEnabled">
+              <Checkbox id="smtp-active" v-model="form.isActive" :disabled="!form.isEnabled" />
+              <FieldLabel for="smtp-active" class="font-normal">
+                Make this the active service on save
+                <span v-if="activeProvider && !form.isActive" class="text-xs text-muted-foreground">
+                  (replaces {{ activeProvider.name }})
+                </span>
+              </FieldLabel>
+            </Field>
           </div>
         </div>
 
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button
+        <DialogFooter class="gap-3">
+          <Button
+            variant="outline"
             @click="modalOpen = false"
-            class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             @click="save"
             :disabled="saving"
-            class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all disabled:opacity-50 flex items-center gap-2"
           >
-            <LoadingIcon v-if="saving" size="xs" color-class="text-white" />
+            <Spinner v-if="saving" />
             {{ saving ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

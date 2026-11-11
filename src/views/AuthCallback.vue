@@ -2,6 +2,8 @@
 import { onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { LoadingIcon } from '@/components/icons';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const route = useRoute();
 const router = useRouter();
@@ -45,32 +47,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[#f0f2f5] font-sans">
-    <div class="text-center p-8 bg-white/80 backdrop-blur-xl rounded-[32px] shadow-xl border border-white/40 max-w-sm w-full mx-4">
-      <div class="relative w-20 h-20 mx-auto mb-6">
-        <div class="absolute inset-0 border-4 border-sky-100 rounded-full"></div>
-        <div class="absolute inset-0 border-4 border-sky-600 rounded-full border-t-transparent animate-spin"></div>
-      </div>
-      
-      <h2 class="text-2xl font-bold text-gray-900 mb-2">Finalizing Sign-in</h2>
-      <p class="text-gray-500">Please wait while we secure your session...</p>
-      
-      <div class="mt-8 flex justify-center gap-2">
-        <div class="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style="animation-delay: 0s"></div>
-        <div class="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-        <div class="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-      </div>
-    </div>
+  <div class="min-h-svh flex items-center justify-center bg-muted p-4">
+    <Card class="w-full max-w-sm py-8 text-center">
+      <CardHeader class="justify-items-center gap-2 px-8">
+        <LoadingIcon size="xl" color-class="text-primary mb-4" />
+        <CardTitle class="font-heading text-2xl font-semibold">Finalizing Sign-in</CardTitle>
+        <CardDescription class="text-base">Please wait while we secure your session...</CardDescription>
+      </CardHeader>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import Swal from 'sweetalert2';
 import { integrationService, type Integration } from '@/services/integrationService';
 import { useAuthStore } from '@/stores/auth';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
 import { LoadingIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import PageHeader from '@/components/common/PageHeader.vue';
 import MailDeliverySettings from '@/components/integrations/MailDeliverySettings.vue';
 import GoogleChatSettings from '@/components/integrations/GoogleChatSettings.vue';
+import { errorMessage } from '@/utils/errors';
 
 interface IntegrationField {
   key: string;
@@ -33,22 +39,13 @@ const INTEGRATIONS_META: IntegrationMeta[] = [
       { key: 'webhook_url', label: 'Incoming Webhook URL', type: 'text', placeholder: 'https://hooks.slack.com/services/...' },
     ],
   },
-  // {
-  //   key: 'gmail',
-  //   title: 'Gmail',
-  //   description: 'Send transactional emails through a Gmail account.',
-  //   fields: [
-  //     { key: 'client_email', label: 'Gmail Address', type: 'text', placeholder: 'you@gmail.com' },
-  //     { key: 'app_password', label: 'App Password', type: 'password' },
-  //   ],
-  // },
 ];
 
 const authStore = useAuthStore();
 const loading = ref(false);
 const saving = ref<string | null>(null);
 const integrations = ref<Record<string, Integration>>({});
-const formState = ref<Record<string, { is_enabled: boolean; config: Record<string, any> }>>(
+const formState = ref<Record<string, { is_enabled: boolean; config: Record<string, string> }>>(
   Object.fromEntries(INTEGRATIONS_META.map((meta) => [meta.key, { is_enabled: false, config: {} }]))
 );
 
@@ -65,12 +62,8 @@ const fetchIntegrations = async () => {
         };
       });
     }
-  } catch (err: any) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: err.message || 'Failed to load integrations',
-    });
+  } catch (err) {
+    toast.error('Error', { description: errorMessage(err, 'Failed to load integrations') });
   } finally {
     loading.value = false;
   }
@@ -85,7 +78,7 @@ const getMissingRequiredFields = (key: string): IntegrationField[] => {
   return meta.fields.filter((field) => field.required && !String(state.config[field.key] ?? '').trim());
 };
 
-const toggleEnabled = async (key: string, event: Event) => {
+const toggleEnabled = async (key: string) => {
   const state = formState.value[key];
   if (!state) return;
 
@@ -95,13 +88,10 @@ const toggleEnabled = async (key: string, event: Event) => {
   if (turningOn) {
     const missing = getMissingRequiredFields(key);
     if (missing.length) {
-      // the native checkbox already flipped itself on click; revert it since state isn't changing
-      (event.target as HTMLInputElement).checked = state.is_enabled;
+      // the Switch is bound to state, so it stays off on its own
       const meta = INTEGRATIONS_META.find((m) => m.key === key);
-      Swal.fire({
-        icon: 'warning',
-        title: 'Missing required fields',
-        text: `Fill in the following before enabling ${meta?.title ?? key}: ${missing.map((f) => f.label).join(', ')}`,
+      toast.warning('Missing required fields', {
+        description: `Fill in the following before enabling ${meta?.title ?? key}: ${missing.map((f) => f.label).join(', ')}`,
       });
       return;
     }
@@ -115,18 +105,11 @@ const toggleEnabled = async (key: string, event: Event) => {
     const response = await integrationService.update(key, { is_enabled: state.is_enabled, config: state.config });
     if (response.success) {
       integrations.value[key] = response.data;
-      Toast.fire({
-        icon: 'success',
-        title: `${response.data.name} ${state.is_enabled ? 'enabled' : 'disabled'}`,
-      });
+      toast.success(`${response.data.name} ${state.is_enabled ? 'enabled' : 'disabled'}`);
     }
-  } catch (err: any) {
+  } catch (err) {
     state.is_enabled = !state.is_enabled;
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: err.response?.data?.message || err.message || 'Failed to update integration status',
-    });
+    toast.error('Error', { description: errorMessage(err, 'Failed to update integration status') });
   }
 };
 
@@ -139,17 +122,10 @@ const save = async (key: string) => {
     const response = await integrationService.update(key, state);
     if (response.success) {
       integrations.value[key] = response.data;
-      Toast.fire({
-        icon: 'success',
-        title: `${response.data.name} settings saved`,
-      });
+      toast.success(`${response.data.name} settings saved`);
     }
-  } catch (err: any) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: err.response?.data?.message || err.message || 'Failed to save integration',
-    });
+  } catch (err) {
+    toast.error('Error', { description: errorMessage(err, 'Failed to save integration') });
   } finally {
     saving.value = null;
   }
@@ -165,12 +141,11 @@ const save = async (key: string) => {
     </div>
 
     <div v-else class="max-w-200 flex flex-col gap-5">
-      <div
+      <Card
         v-for="meta in INTEGRATIONS_META"
         :key="meta.key"
-        class="bg-white border border-gray-100 shadow-sm rounded-lg border border-gray-200 p-6"
       >
-        <div class="flex items-start justify-between mb-2">
+        <CardHeader>
           <div class="flex items-start gap-3">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
               <svg v-if="meta.key === 'slack'" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -179,61 +154,51 @@ const save = async (key: string) => {
                 <path d="M21.6349 10.5317C21.6349 8.9973 22.8741 7.75717 24.4073 7.75717C25.9404 7.75717 27.1796 8.9973 27.1796 10.5317C27.1796 12.0661 25.9404 13.3062 24.4073 13.3062H21.6349V10.5317ZM20.2488 10.5317C20.2488 12.0661 19.0096 13.3062 17.4764 13.3062C15.9432 13.3062 14.7041 12.0661 14.7041 10.5317V3.57434C14.7041 2.03994 15.9432 0.799805 17.4764 0.799805C19.0096 0.799805 20.2488 2.03994 20.2488 3.57434V10.5317Z" fill="#2EB67D"/>
                 <path d="M17.4764 21.6507C19.0096 21.6507 20.2488 22.8908 20.2488 24.4252C20.2488 25.9596 19.0096 27.1998 17.4764 27.1998C15.9432 27.1998 14.7041 25.9596 14.7041 24.4252V21.6507H17.4764ZM17.4764 20.2634C15.9432 20.2634 14.7041 19.0233 14.7041 17.4889C14.7041 15.9545 15.9432 14.7144 17.4764 14.7144H24.4283C25.9614 14.7144 27.2006 15.9545 27.2006 17.4889C27.2006 19.0233 25.9614 20.2634 24.4283 20.2634H17.4764Z" fill="#ECB22E"/>
               </svg>
-              <!-- <svg v-else-if="meta.key === 'gmail'" width="30" height="23" viewBox="0 0 30 23" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M0 5.87891V20.4445C0 22.148 0.833341 22.9998 2.50002 22.9998H6.8334V5.87891" fill="#4285F4"/>
-                <path d="M23.167 5.87891V22.9998H27.5004C29.167 22.9998 30.0004 22.148 30.0004 20.4445V5.87891" fill="#34A853"/>
-                <path d="M22.833 11.4149V2.386L25.1664 0.597249C27.1664 -0.935969 29.9997 0.767606 29.9997 3.15261V5.87833" fill="#FBBC04"/>
-                <path d="M6.49902 10.9049V1.87598L14.9991 8.43474L23.1658 2.13151V11.1605L14.9991 17.4637" fill="#EA4335"/>
-                <path d="M0 5.879V3.15328C0 0.683095 2.83336 -0.935302 4.83338 0.597916L6.8334 2.13113V11.1601" fill="#C5221F"/>
-              </svg> -->
             </div>
             <div>
-              <h3 class="text-base font-semibold text-dark">{{ meta.title }}</h3>
-              <p class="text-sm text-gray-500 mt-1">{{ meta.description }}</p>
+              <CardTitle class="font-semibold">{{ meta.title }}</CardTitle>
+              <CardDescription class="mt-1">{{ meta.description }}</CardDescription>
             </div>
           </div>
 
-          <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
-            <input
-              type="checkbox"
-              class="sr-only peer"
-              :checked="formState[meta.key]!.is_enabled"
-              @change="toggleEnabled(meta.key, $event)"
+          <CardAction class="ml-4">
+            <Switch
+              :aria-label="`Enable ${meta.title}`"
+              :model-value="formState[meta.key]!.is_enabled"
               :disabled="!authStore.hasPermission('integrations.edit')"
+              @update:model-value="toggleEnabled(meta.key)"
             />
-            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-teal transition-colors"></div>
-            <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-          </label>
-        </div>
+          </CardAction>
+        </CardHeader>
 
-        <div v-if="formState[meta.key]" class="space-y-3 mt-4">
-          <div v-for="field in meta.fields" :key="field.key">
-            <label :for="`${meta.key}-${field.key}`" class="block text-sm font-medium text-gray-600 mb-1">
-              {{ field.label }}<span v-if="field.required" class="text-red-500"> *</span>
-            </label>
-            <input
-              :id="`${meta.key}-${field.key}`"
-              :name="`${meta.key}-${field.key}`"
-              :type="field.type"
-              v-model="formState[meta.key]!.config[field.key]"
-              :placeholder="field.placeholder"
-              :disabled="!authStore.hasPermission('integrations.edit')"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal focus:border-transparent disabled:bg-gray-50"
-            />
-          </div>
-        </div>
+        <CardContent v-if="formState[meta.key]">
+          <FieldGroup class="gap-3">
+            <Field v-for="field in meta.fields" :key="field.key" class="gap-1.5">
+              <FieldLabel :for="`${meta.key}-${field.key}`">
+                {{ field.label }}<span v-if="field.required" class="text-destructive"> *</span>
+              </FieldLabel>
+              <Input
+                :id="`${meta.key}-${field.key}`"
+                :name="`${meta.key}-${field.key}`"
+                :type="field.type"
+                v-model="formState[meta.key]!.config[field.key]"
+                :placeholder="field.placeholder"
+                :disabled="!authStore.hasPermission('integrations.edit')"
+              />
+            </Field>
+          </FieldGroup>
+        </CardContent>
 
-        <div class="mt-4 flex justify-end" v-if="authStore.hasPermission('integrations.edit')">
-          <button
+        <CardFooter class="justify-end" v-if="authStore.hasPermission('integrations.edit')">
+          <Button
             @click="save(meta.key)"
             :disabled="saving === meta.key"
-            class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <LoadingIcon v-if="saving === meta.key" size="xs" color-class="text-white" />
+            <Spinner v-if="saving === meta.key" />
             {{ saving === meta.key ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </CardFooter>
+      </Card>
 
       <GoogleChatSettings />
 

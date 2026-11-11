@@ -1,10 +1,10 @@
 <template>
-  <div class="mb-6 flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold text-dark">{{ title }}</h1>
-      <p v-if="description" class="text-b4 text-mid mt-1">{{ description }}</p>
+  <div class="mb-6 flex items-start justify-between gap-4">
+    <div class="min-w-0">
+      <h1 class="font-heading text-2xl font-semibold tracking-tight text-foreground">{{ title }}</h1>
+      <p v-if="description" class="mt-1 text-sm text-muted-foreground">{{ description }}</p>
     </div>
-    <div v-if="$slots.actions" class="flex items-center gap-3">
+    <div v-if="$slots.actions" class="flex shrink-0 items-center gap-3">
       <slot name="actions"></slot>
     </div>
   </div>

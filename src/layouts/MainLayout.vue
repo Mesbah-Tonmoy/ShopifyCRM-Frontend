@@ -1,25 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import Sidebar from '@/components/layout/Sidebar.vue';
-import Header from '@/components/layout/Header.vue';
-
-const sidebarCollapsed = ref(false);
+import AppSidebar from '@/components/layout/AppSidebar.vue';
+import AppHeader from '@/components/layout/AppHeader.vue';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 </script>
 
 <template>
-  <div class="flex h-screen bg-background overflow-hidden">
-    <!-- Sidebar -->
-    <Sidebar v-model:collapsed="sidebarCollapsed" />
+  <!-- Open/collapsed state is kept in a cookie by SidebarProvider; Ctrl/Cmd+B toggles it.
+       The icon rail is widened from shadcn's 3rem so its buttons don't sit edge to edge. -->
+  <SidebarProvider :style="{ '--sidebar-width-icon': '4rem' }">
+    <AppSidebar />
 
-    <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-      <!-- Header -->
-      <Header />
+    <SidebarInset class="h-svh overflow-hidden">
+      <AppHeader />
 
       <!-- Page Content -->
-      <main class="flex-1 overflow-y-auto bg-background p-6">
+      <div class="flex-1 overflow-y-auto bg-muted/50 p-6">
         <router-view />
-      </main>
-    </div>
-  </div>
+      </div>
+    </SidebarInset>
+  </SidebarProvider>
 </template>

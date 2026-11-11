@@ -7,7 +7,11 @@ import {
 } from '@/services/integrationService';
 import type { ApiError } from '@/config/api';
 import { useAuthStore } from '@/stores/auth';
+import { Plus } from '@lucide/vue';
 import { LoadingIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import AppAlert from '@/components/common/AppAlert.vue';
 import GoogleChatSpaceCard from './GoogleChatSpaceCard.vue';
 
 /**
@@ -59,8 +63,8 @@ const onRemoved = (row: Row) => {
 </script>
 
 <template>
-  <div class="bg-white border border-gray-100 shadow-sm rounded-lg border border-gray-200 p-6">
-    <div class="flex items-start justify-between mb-2">
+  <Card>
+    <CardHeader>
       <div class="flex items-start gap-3">
         <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -71,46 +75,49 @@ const onRemoved = (row: Row) => {
           </svg>
         </div>
         <div>
-          <h3 class="text-base font-semibold text-dark">Google Chat</h3>
-          <p class="text-sm text-gray-500 mt-1">
+          <CardTitle class="font-semibold">Google Chat</CardTitle>
+          <CardDescription class="mt-1">
             Post to Google Chat spaces when store events happen. Each space has its own webhook, events and apps.
-          </p>
-          <p class="text-xs text-gray-400 mt-1">
+          </CardDescription>
+          <p class="text-xs text-muted-foreground mt-1">
             To get a webhook URL: open the space in Google Chat → Apps &amp; integrations → Webhooks → Add webhook.
           </p>
         </div>
       </div>
-    </div>
+    </CardHeader>
 
-    <div v-if="loading" class="flex justify-center py-6">
-      <LoadingIcon size="md" />
-    </div>
-
-    <p v-else-if="loadError" class="text-sm text-red-600 mt-4">{{ loadError }}</p>
-
-    <div v-else class="mt-4 space-y-3">
-      <GoogleChatSpaceCard
-        v-for="row in rows"
-        :key="row.key"
-        :space="row.space"
-        :options="options"
-        :can-edit="canEdit"
-        @saved="(space) => onSaved(row, space)"
-        @removed="onRemoved(row)"
-      />
-
-      <p v-if="!rows.length" class="text-sm text-gray-500 italic">
-        No spaces yet. Add one for each app (or group of apps) you want notifications about.
-      </p>
-
-      <div v-if="canEdit" class="flex justify-end">
-        <button
-          @click="addSpace"
-          class="border border-teal text-teal px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal hover:text-white transition-all"
-        >
-          + Add space
-        </button>
+    <CardContent>
+      <div v-if="loading" class="flex justify-center py-6">
+        <LoadingIcon size="md" />
       </div>
-    </div>
-  </div>
+
+      <AppAlert v-else-if="loadError" tone="danger">{{ loadError }}</AppAlert>
+
+      <div v-else class="space-y-3">
+        <GoogleChatSpaceCard
+          v-for="row in rows"
+          :key="row.key"
+          :space="row.space"
+          :options="options"
+          :can-edit="canEdit"
+          @saved="(space) => onSaved(row, space)"
+          @removed="onRemoved(row)"
+        />
+
+        <p v-if="!rows.length" class="text-sm text-muted-foreground italic">
+          No spaces yet. Add one for each app (or group of apps) you want notifications about.
+        </p>
+
+        <div v-if="canEdit" class="flex justify-end">
+          <Button
+            variant="outline"
+            @click="addSpace"
+          >
+            <Plus />
+            Add space
+          </Button>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 </template>

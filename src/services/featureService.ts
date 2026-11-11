@@ -1,4 +1,6 @@
-import { apiService } from '@/config/api';
+import { apiService, type ApiResponse } from '@/config/api';
+import type { PaginatedResponse } from '@/types';
+import { toQuery } from '@/utils/query';
 
 export interface Feature {
     id: number;
@@ -27,87 +29,50 @@ export interface FeatureFilters {
     page?: number;
 }
 
-export interface PaginatedResponse<T> {
-    success: boolean;
-    data: {
-        data: T[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
-    };
-}
-
-export interface ApiResponse<T> {
-    success: boolean;
-    message?: string;
-    data: T;
-}
-
 export const featureService = {
     // Get all features with filters
-    async getAll(filters?: FeatureFilters): Promise<PaginatedResponse<Feature>> {
-        const params = new URLSearchParams();
-        if (filters) {
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    params.append(key, value.toString());
-                }
-            });
-        }
+    async getAll(filters?: FeatureFilters): Promise<ApiResponse<PaginatedResponse<Feature>>> {
+        const endpoint = `/features${toQuery(filters)}`;
 
-        const queryString = params.toString();
-        const endpoint = `/features${queryString ? `?${queryString}` : ''}`;
-
-        return apiService.get<PaginatedResponse<Feature>['data']>(endpoint) as Promise<PaginatedResponse<Feature>>;
+        return apiService.get<PaginatedResponse<Feature>>(endpoint);
     },
 
     // Get single feature
     async getById(id: number): Promise<ApiResponse<Feature>> {
-        return apiService.get<Feature>(`/features/${id}`) as Promise<ApiResponse<Feature>>;
+        return apiService.get<Feature>(`/features/${id}`);
     },
 
     // Create new feature
     async create(data: Partial<Feature>): Promise<ApiResponse<Feature>> {
-        return apiService.post<Feature>('/features', data) as Promise<ApiResponse<Feature>>;
+        return apiService.post<Feature>('/features', data);
     },
 
     // Update feature
     async update(id: number, data: Partial<Feature>): Promise<ApiResponse<Feature>> {
-        return apiService.put<Feature>(`/features/${id}`, data) as Promise<ApiResponse<Feature>>;
+        return apiService.put<Feature>(`/features/${id}`, data);
     },
 
     // Delete feature
     async delete(id: number): Promise<ApiResponse<null>> {
-        return apiService.delete<null>(`/features/${id}`) as Promise<ApiResponse<null>>;
+        return apiService.delete<null>(`/features/${id}`);
     },
 
     // Toggle published status
     async togglePublished(id: number): Promise<ApiResponse<Feature>> {
-        return apiService.post<Feature>(`/features/${id}/toggle-published`, {}) as Promise<ApiResponse<Feature>>;
+        return apiService.post<Feature>(`/features/${id}/toggle-published`, {});
     },
 
     // Upload/replace the feature image
     async uploadImage(id: number, file: File): Promise<ApiResponse<Feature>> {
         const formData = new FormData();
         formData.append('image', file);
-        return apiService.postForm<Feature>(`/features/${id}/image`, formData) as Promise<ApiResponse<Feature>>;
+        return apiService.postForm<Feature>(`/features/${id}/image`, formData);
     },
 
     // Get features by app
-    async getByApp(appId: number, filters?: Omit<FeatureFilters, 'app_id'>): Promise<PaginatedResponse<Feature>> {
-        const params = new URLSearchParams();
-        if (filters) {
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    params.append(key, value.toString());
-                }
-            });
-        }
+    async getByApp(appId: number, filters?: Omit<FeatureFilters, 'app_id'>): Promise<ApiResponse<PaginatedResponse<Feature>>> {
+        const endpoint = `/apps/${appId}/features${toQuery(filters)}`;
 
-        const queryString = params.toString();
-        const endpoint = `/apps/${appId}/features${queryString ? `?${queryString}` : ''}`;
-
-        return apiService.get<PaginatedResponse<Feature>['data']>(endpoint) as Promise<PaginatedResponse<Feature>>;
+        return apiService.get<PaginatedResponse<Feature>>(endpoint);
     },
 };

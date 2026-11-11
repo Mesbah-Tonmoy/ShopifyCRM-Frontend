@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import Swal from 'sweetalert2';
 import {
   integrationService,
   type GoogleChatSpace,
@@ -8,8 +7,17 @@ import {
   type GoogleChatOptions,
 } from '@/services/integrationService';
 import type { ApiError } from '@/config/api';
-import { Toast } from '@/utils/toast';
-import { LoadingIcon } from '@/components/icons';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
+import { toggleInList } from '@/lib/list';
 
 /**
  * One Google Chat space: its webhook, the events it hears about and the apps
@@ -80,36 +88,34 @@ const persist = async (successTitle: string) => {
     : await integrationService.createGoogleChatSpace(payload);
   if (response.success) {
     emit('saved', response.data);
-    Toast.fire({ icon: 'success', title: successTitle });
+    toast.success(successTitle);
   }
 };
 
 const save = async () => {
   if (missing.value.length) {
-    Swal.fire({ icon: 'warning', title: 'Missing settings', text: `Add ${missing.value.join(', ')} first.` });
+    toast.warning('Missing settings', { description: `Add ${missing.value.join(', ')} first.` });
     return;
   }
   try {
     busy.value = 'save';
     await persist(isNew.value ? 'Google Chat space added' : 'Google Chat space saved');
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Error', text: errorText(err as ApiError) });
+    toast.error('Error', { description: errorText(err as ApiError) });
   } finally {
     busy.value = null;
   }
 };
 
-const toggleEnabled = async (event: Event) => {
-  const checkbox = event.target as HTMLInputElement;
-  form.value.is_enabled = checkbox.checked;
+const toggleEnabled = async (checked: boolean) => {
+  form.value.is_enabled = checked;
 
   // An unsaved space is only switched in the form; Save stores it.
   if (isNew.value) return;
 
   if (missing.value.length) {
-    form.value.is_enabled = !checkbox.checked;
-    checkbox.checked = form.value.is_enabled;
-    Swal.fire({ icon: 'warning', title: 'Missing settings', text: `Add ${missing.value.join(', ')} before enabling this space.` });
+    form.value.is_enabled = !checked;
+    toast.warning('Missing settings', { description: `Add ${missing.value.join(', ')} before enabling this space.` });
     return;
   }
 
@@ -118,8 +124,7 @@ const toggleEnabled = async (event: Event) => {
     await persist(`${form.value.name} ${form.value.is_enabled ? 'enabled' : 'disabled'}`);
   } catch (err) {
     form.value.is_enabled = !form.value.is_enabled;
-    checkbox.checked = form.value.is_enabled;
-    Swal.fire({ icon: 'error', title: 'Error', text: errorText(err as ApiError) });
+    toast.error('Error', { description: errorText(err as ApiError) });
   } finally {
     busy.value = null;
   }
@@ -129,9 +134,9 @@ const sendTest = async () => {
   try {
     busy.value = 'test';
     const response = await integrationService.testGoogleChat(form.value.webhook_url.trim());
-    Toast.fire({ icon: 'success', title: response.message || 'Test message sent' });
+    toast.success(response.message || 'Test message sent');
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Test failed', text: errorText(err as ApiError) });
+    toast.error('Test failed', { description: errorText(err as ApiError) });
   } finally {
     busy.value = null;
   }
@@ -143,23 +148,21 @@ const remove = async () => {
     return;
   }
 
-  const confirm = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: `Remove "${props.space.name}"?`,
-    text: 'This space will stop receiving notifications. The Google Chat space itself is not affected.',
-    showCancelButton: true,
-    confirmButtonText: 'Remove',
-    confirmButtonColor: '#dc2626',
+    description: 'This space will stop receiving notifications. The Google Chat space itself is not affected.',
+    confirmText: 'Remove',
+    destructive: true,
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     busy.value = 'delete';
     await integrationService.deleteGoogleChatSpace(props.space.id);
     emit('removed');
-    Toast.fire({ icon: 'success', title: 'Google Chat space removed' });
+    toast.success('Google Chat space removed');
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Error', text: errorText(err as ApiError) });
+    toast.error('Error', { description: errorText(err as ApiError) });
   } finally {
     busy.value = null;
   }
@@ -167,129 +170,142 @@ const remove = async () => {
 </script>
 
 <template>
-  <div class="border border-gray-200 rounded-lg p-4" :class="{ 'border-dashed': isNew }">
-    <div class="flex items-start justify-between gap-4">
+  <Card size="sm" :class="{ 'border border-dashed ring-0': isNew }">
+    <CardHeader>
       <div class="min-w-0">
-        <h4 class="text-sm font-semibold text-dark truncate">{{ form.name.trim() || 'New space' }}</h4>
-        <p class="text-xs text-gray-500 mt-0.5 truncate">{{ appSummary }}</p>
+        <CardTitle class="text-sm font-semibold truncate">{{ form.name.trim() || 'New space' }}</CardTitle>
+        <CardDescription class="text-xs mt-0.5 truncate">{{ appSummary }}</CardDescription>
       </div>
 
-      <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
-        <input
-          type="checkbox"
-          class="sr-only peer"
-          :checked="form.is_enabled"
-          @change="toggleEnabled"
+      <CardAction>
+        <Switch
+          :model-value="form.is_enabled"
+          @update:model-value="toggleEnabled"
           :disabled="!canEdit || busy !== null"
           :aria-label="`Enable ${form.name || 'space'}`"
         />
-        <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-teal transition-colors"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-      </label>
-    </div>
+      </CardAction>
+    </CardHeader>
 
-    <div class="space-y-4 mt-4">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <label :for="`${uid}-name`" class="block text-sm font-medium text-gray-600 mb-1">
-            Name<span class="text-red-500"> *</span>
-          </label>
-          <input
-            :id="`${uid}-name`"
-            type="text"
-            v-model="form.name"
-            maxlength="100"
-            placeholder="e.g. FormCRM installs"
+    <CardContent>
+      <FieldGroup class="gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Field class="gap-1.5">
+            <FieldLabel :for="`${uid}-name`">
+              Name<span class="text-destructive"> *</span>
+            </FieldLabel>
+            <Input
+              :id="`${uid}-name`"
+              type="text"
+              v-model="form.name"
+              maxlength="100"
+              placeholder="e.g. FormCRM installs"
+              :disabled="!canEdit"
+            />
+          </Field>
+          <Field class="gap-1.5 sm:col-span-2">
+            <FieldLabel :for="`${uid}-webhook`">
+              Space Webhook URL<span class="text-destructive"> *</span>
+            </FieldLabel>
+            <Input
+              :id="`${uid}-webhook`"
+              type="text"
+              v-model="form.webhook_url"
+              placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=...&token=..."
+              :disabled="!canEdit"
+            />
+          </Field>
+        </div>
+
+        <FieldSet class="gap-2">
+          <FieldLegend variant="label">
+            Notify on<span class="text-destructive"> *</span>
+          </FieldLegend>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Field
+              v-for="event in options.events"
+              :key="event.key"
+              orientation="horizontal"
+              class="gap-2"
+            >
+              <Checkbox
+                :id="`${uid}-event-${event.key}`"
+                :model-value="form.events.includes(event.key)"
+                @update:model-value="(v) => (form.events = toggleInList(form.events, event.key, v))"
+                :disabled="!canEdit"
+              />
+              <FieldLabel :for="`${uid}-event-${event.key}`" class="font-normal">{{ event.label }}</FieldLabel>
+            </Field>
+          </div>
+        </FieldSet>
+
+        <FieldSet class="gap-2">
+          <FieldLegend variant="label">Apps</FieldLegend>
+          <RadioGroup
+            :model-value="form.app_scope"
+            @update:model-value="(v) => (form.app_scope = v === 'all' ? 'all' : 'selected')"
             :disabled="!canEdit"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal focus:border-transparent disabled:bg-gray-50"
-          />
-        </div>
-        <div class="sm:col-span-2">
-          <label :for="`${uid}-webhook`" class="block text-sm font-medium text-gray-600 mb-1">
-            Space Webhook URL<span class="text-red-500"> *</span>
-          </label>
-          <input
-            :id="`${uid}-webhook`"
-            type="text"
-            v-model="form.webhook_url"
-            placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=...&token=..."
-            :disabled="!canEdit"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal focus:border-transparent disabled:bg-gray-50"
-          />
-        </div>
-      </div>
-
-      <fieldset>
-        <legend class="block text-sm font-medium text-gray-600 mb-2">
-          Notify on<span class="text-red-500"> *</span>
-        </legend>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <label
-            v-for="event in options.events"
-            :key="event.key"
-            class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+            class="flex w-auto gap-5"
           >
-            <input type="checkbox" :value="event.key" v-model="form.events" :disabled="!canEdit" class="h-4 w-4 accent-teal" />
-            {{ event.label }}
-          </label>
-        </div>
-      </fieldset>
+            <Field orientation="horizontal" class="w-auto gap-2">
+              <RadioGroupItem :id="`${uid}-scope-selected`" value="selected" />
+              <FieldLabel :for="`${uid}-scope-selected`" class="font-normal">Specific apps</FieldLabel>
+            </Field>
+            <Field orientation="horizontal" class="w-auto gap-2">
+              <RadioGroupItem :id="`${uid}-scope-all`" value="all" />
+              <FieldLabel :for="`${uid}-scope-all`" class="font-normal">All apps</FieldLabel>
+            </Field>
+          </RadioGroup>
 
-      <fieldset>
-        <legend class="block text-sm font-medium text-gray-600 mb-2">Apps</legend>
-        <div class="flex gap-5 text-sm text-gray-700">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="radio" value="selected" v-model="form.app_scope" :disabled="!canEdit" class="h-4 w-4 accent-teal" />
-            Specific apps
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="radio" value="all" v-model="form.app_scope" :disabled="!canEdit" class="h-4 w-4 accent-teal" />
-            All apps
-          </label>
-        </div>
-
-        <div
-          v-if="form.app_scope === 'selected'"
-          class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gray-200 rounded-lg p-3 max-h-60 overflow-y-auto"
-        >
-          <label
-            v-for="app in options.apps"
-            :key="app.id"
-            class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+          <div
+            v-if="form.app_scope === 'selected'"
+            class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 border rounded-lg p-3 max-h-60 overflow-y-auto"
           >
-            <input type="checkbox" :value="app.id" v-model="form.app_ids" :disabled="!canEdit" class="h-4 w-4 accent-teal" />
-            {{ app.app_name }}
-          </label>
-          <p v-if="!options.apps.length" class="text-sm text-gray-400 italic">No apps connected yet</p>
-        </div>
-      </fieldset>
-    </div>
+            <Field
+              v-for="app in options.apps"
+              :key="app.id"
+              orientation="horizontal"
+              class="gap-2"
+            >
+              <Checkbox
+                :id="`${uid}-app-${app.id}`"
+                :model-value="form.app_ids.includes(app.id)"
+                @update:model-value="(v) => (form.app_ids = toggleInList(form.app_ids, app.id, v))"
+                :disabled="!canEdit"
+              />
+              <FieldLabel :for="`${uid}-app-${app.id}`" class="font-normal">{{ app.app_name }}</FieldLabel>
+            </Field>
+            <p v-if="!options.apps.length" class="text-sm text-muted-foreground italic">No apps connected yet</p>
+          </div>
+        </FieldSet>
+      </FieldGroup>
+    </CardContent>
 
-    <div class="mt-4 flex flex-wrap justify-end gap-2" v-if="canEdit">
-      <button
+    <CardFooter class="flex-wrap justify-end gap-2" v-if="canEdit">
+      <Button
+        variant="destructive"
         @click="remove"
         :disabled="busy !== null"
-        class="mr-auto text-red-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        class="mr-auto"
       >
-        <LoadingIcon v-if="busy === 'delete'" size="xs" />
+        <Spinner v-if="busy === 'delete'" />
         {{ isNew ? 'Cancel' : 'Remove' }}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="outline"
         @click="sendTest"
         :disabled="busy !== null || !form.webhook_url.trim()"
-        class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
-        <LoadingIcon v-if="busy === 'test'" size="xs" />
+        <Spinner v-if="busy === 'test'" />
         {{ busy === 'test' ? 'Sending...' : 'Send test message' }}
-      </button>
-      <button
+      </Button>
+      <Button
         @click="save"
         :disabled="busy !== null"
-        class="bg-teal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
-        <LoadingIcon v-if="busy === 'save'" size="xs" color-class="text-white" />
+        <Spinner v-if="busy === 'save'" />
         {{ busy === 'save' ? 'Saving...' : isNew ? 'Add space' : 'Save' }}
-      </button>
-    </div>
-  </div>
+      </Button>
+    </CardFooter>
+  </Card>
 </template>

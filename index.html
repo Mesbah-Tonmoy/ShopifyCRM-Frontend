@@ -6,10 +6,19 @@
   <link rel="icon" href="/favicon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shopify CRM</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@300;400;500;600;700&display=swap"
-    rel="stylesheet">
+  <script>
+    // Apply the saved colour mode before the app loads, so a dark page never flashes white.
+    // Keep the key and rules in step with src/composables/useColorMode.ts. The merchant
+    // board (/board/…) has its own theme and is left alone.
+    (function () {
+      try {
+        if (location.pathname.indexOf('/board/') === 0) return;
+        var mode = localStorage.getItem('crm_color_mode') || 'system';
+        var dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body>

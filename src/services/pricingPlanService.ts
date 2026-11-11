@@ -1,4 +1,6 @@
 import { apiService } from '@/config/api';
+import type { PaginatedResponse } from '@/types';
+import { toQuery } from '@/utils/query';
 
 export interface PricingPlan {
     id: number;
@@ -34,41 +36,42 @@ export interface PlanFeature {
     };
 }
 
-export interface ApiResponse<T> {
-    success: boolean;
-    message?: string;
-    data: T;
+/** Query filters for the plans list; `is_active` is sent as 1/0. */
+export interface PricingPlanFilters {
+    per_page?: number;
+    app_id?: number;
+    is_active?: number;
+}
+
+export type PricingPlanUpdate = Partial<Pick<PricingPlan, 'display_name' | 'amount' | 'is_active'>>;
+
+export interface PlanFeaturesResponse {
+    plan: PricingPlan;
+    features: PlanFeature[];
 }
 
 export const pricingPlanService = {
-    async getAll(params = {}) {
-        const urlParams = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                urlParams.append(key, value.toString());
-            }
-        });
-        const queryString = urlParams.toString();
-        return apiService.get<any>(`/pricing-plans${queryString ? `?${queryString}` : ''}`);
+    async getAll(params: PricingPlanFilters = {}) {
+        return apiService.get<PaginatedResponse<PricingPlan>>(`/pricing-plans${toQuery(params)}`);
     },
 
-    async update(id: number, data: any) {
-        return apiService.put<any>(`/pricing-plans/${id}`, data);
+    async update(id: number, data: PricingPlanUpdate) {
+        return apiService.put<PricingPlan>(`/pricing-plans/${id}`, data);
     },
 
     async toggleActive(id: number) {
-        return apiService.post<any>(`/pricing-plans/${id}/toggle-active`, {});
+        return apiService.post<PricingPlan>(`/pricing-plans/${id}/toggle-active`, {});
     },
 
     async getFeatures(id: number) {
-        return apiService.get<any>(`/pricing-plans/${id}/features`);
+        return apiService.get<PlanFeaturesResponse>(`/pricing-plans/${id}/features`);
     },
 
-    async updateFeatures(id: number, features: { id: number; value: any }[]) {
-        return apiService.put<any>(`/pricing-plans/${id}/features`, { features });
+    async updateFeatures(id: number, features: { id: number; value: PlanFeature['value'] }[]) {
+        return apiService.put<null>(`/pricing-plans/${id}/features`, { features });
     },
 
     async syncPlans(appId: number) {
-        return apiService.post<any>(`/apps/${appId}/push-plans`, {});
+        return apiService.post<null>(`/apps/${appId}/push-plans`, {});
     }
 };

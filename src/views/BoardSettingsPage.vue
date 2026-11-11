@@ -1,11 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import Swal from 'sweetalert2';
+import { LayoutList } from '@lucide/vue';
+import AppAlert from '@/components/common/AppAlert.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SelectInput from '@/components/common/SelectInput.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAppsStore } from '@/stores/apps';
-import { Toast } from '@/utils/toast';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
 import {
   FEATURE_REQUEST_STATUSES,
   boardSettingsService,
@@ -113,7 +132,7 @@ const load = async () => {
     config.value = response.data;
     settings.value = response.data.settings ? { ...response.data.settings } : null;
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to load board settings' });
+    toast.error((err as Error).message || 'Failed to load board settings');
   } finally {
     loading.value = false;
   }
@@ -128,9 +147,9 @@ const provision = async () => {
     const response = await boardSettingsService.provision(selectedAppId.value);
     config.value = response.data;
     settings.value = response.data.settings ? { ...response.data.settings } : null;
-    Toast.fire({ icon: 'success', title: 'Board is ready to embed' });
+    toast.success('Board is ready to embed');
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to set up board' });
+    toast.error((err as Error).message || 'Failed to set up board');
   } finally {
     saving.value = false;
   }
@@ -145,9 +164,9 @@ const save = async () => {
     const response = await boardSettingsService.update(selectedAppId.value, settings.value);
     config.value = response.data;
     settings.value = response.data.settings ? { ...response.data.settings } : null;
-    Toast.fire({ icon: 'success', title: 'Board settings saved' });
+    toast.success('Board settings saved');
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to save settings' });
+    toast.error((err as Error).message || 'Failed to save settings');
   } finally {
     saving.value = false;
   }
@@ -156,44 +175,57 @@ const save = async () => {
 const rotateSecret = async () => {
   if (!selectedAppId.value) return;
 
-  const confirmed = await Swal.fire({
-    icon: 'warning',
+  const { confirmed } = await confirmDialog({
     title: 'Rotate the signing secret?',
-    text: 'The board stops working until you update the app with the new secret.',
-    showCancelButton: true,
-    confirmButtonText: 'Rotate',
-    confirmButtonColor: '#F83939',
+    description: 'The board stops working until you update the app with the new secret.',
+    confirmText: 'Rotate',
+    destructive: true,
   });
 
-  if (!confirmed.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     const response = await boardSettingsService.rotateSecret(selectedAppId.value);
     revealedSecret.value = response.data.board_secret;
   } catch (err) {
-    Toast.fire({ icon: 'error', title: (err as Error).message || 'Failed to rotate secret' });
+    toast.error((err as Error).message || 'Failed to rotate secret');
   }
 };
 
-const toggleStatus = (status: FeatureRequestStatus) => {
-  if (!settings.value) return;
+/** The roadmap columns currently on, in the order they were switched on (null means all of them). */
+const visibleStatuses = computed<FeatureRequestStatus[]>(
+  () => settings.value?.visible_statuses ?? FEATURE_REQUEST_STATUSES.map((s) => s.value)
+);
 
-  const current = settings.value.visible_statuses ?? FEATURE_REQUEST_STATUSES.map((s) => s.value);
+/**
+ * The toggle group hands back the whole selection: a newly switched-on column
+ * is appended, a switched-off one dropped — the same list a single toggle built.
+ */
+const setVisibleStatuses = (value: unknown) => {
+  if (!settings.value || !Array.isArray(value)) return;
 
-  settings.value.visible_statuses = current.includes(status)
-    ? current.filter((value) => value !== status)
-    : [...current, status];
+  settings.value.visible_statuses = value.filter((status): status is FeatureRequestStatus =>
+    FEATURE_REQUEST_STATUSES.some((s) => s.value === status)
+  );
 };
 
-const isStatusVisible = (status: FeatureRequestStatus): boolean =>
-  (settings.value?.visible_statuses ?? FEATURE_REQUEST_STATUSES.map((s) => s.value)).includes(status);
+type TextSetting = 'title' | 'intro' | 'new_request_email' | 'new_request_cc' | 'new_request_bcc';
+
+/** Text inputs hand back what was typed; a field never touched keeps its stored null. */
+const setText = (key: TextSetting, value: string | number) => {
+  if (settings.value) settings.value[key] = String(value);
+};
+
+const setToggle = (key: keyof BoardSettings, value: boolean) => {
+  if (settings.value) (settings.value[key] as boolean) = value;
+};
 
 const copy = async (value: string, what: string) => {
   try {
     await navigator.clipboard.writeText(value);
-    Toast.fire({ icon: 'success', title: `${what} copied` });
+    toast.success(`${what} copied`);
   } catch {
-    Toast.fire({ icon: 'error', title: 'Copy failed — select the text manually' });
+    toast.error('Copy failed — select the text manually');
   }
 };
 
@@ -230,19 +262,16 @@ $token = $payload . '.' . hash_hmac('sha256', $payload, env('CRM_BOARD_SECRET'))
   <div>
     <PageHeader title="Board Settings" description="Set up the feature request board each of your apps embeds.">
       <template #actions>
-        <router-link
-          :to="{ name: 'feature-requests' }"
-          class="rounded-sm border border-grey px-3 py-2 text-b5 font-semibold text-mid hover:bg-lighter"
-        >
-          Back to requests
-        </router-link>
+        <Button as-child variant="outline" size="sm">
+          <router-link :to="{ name: 'feature-requests' }">
+            Back to requests
+          </router-link>
+        </Button>
       </template>
     </PageHeader>
 
     <div class="mb-5">
-      <SelectInput v-model="selectedAppId" label="App" select-class="w-64">
-        <option v-for="app in appsStore.apps" :key="app.id" :value="app.id">{{ app.app_name }}</option>
-      </SelectInput>
+      <SelectInput v-model="selectedAppId" :options="appsStore.appOptions" label="App" select-class="w-64" />
     </div>
 
     <div v-if="loading" class="space-y-3">
@@ -250,205 +279,229 @@ $token = $payload . '.' . hash_hmac('sha256', $payload, env('CRM_BOARD_SECRET'))
     </div>
 
     <!-- not set up yet -->
-    <div v-else-if="config && !config.provisioned" class="rounded-lg border border-lighter bg-white p-8 text-center">
-      <h2 class="text-h4 font-semibold text-dark">This app has no board yet</h2>
-      <p class="mx-auto mt-1 max-w-md text-b4 text-mid">
-        Generate a public URL and signing credentials so {{ config.app.app_name }} can embed its feature request board.
-      </p>
-      <button
-        class="mt-4 rounded-sm bg-primary px-4 py-2 text-b4 font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
-        :disabled="saving"
-        @click="provision"
-      >
-        Set up board
-      </button>
-    </div>
+    <Card v-else-if="config && !config.provisioned" class="py-0">
+      <Empty class="p-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <LayoutList />
+          </EmptyMedia>
+          <EmptyTitle class="font-heading text-base font-semibold">This app has no board yet</EmptyTitle>
+          <EmptyDescription class="max-w-md">
+            Generate a public URL and signing credentials so {{ config.app.app_name }} can embed its feature request board.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button
+            :disabled="saving"
+            @click="provision"
+          >
+            Set up board
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </Card>
 
     <div v-else-if="config && settings" class="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <!-- settings -->
       <div class="space-y-5 lg:col-span-2">
-        <section class="rounded-lg border border-lighter bg-white p-5">
-          <h2 class="mb-4 text-h4 font-semibold text-dark">Presentation</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle class="font-heading font-semibold">Presentation</CardTitle>
+          </CardHeader>
 
-          <div class="space-y-4">
-            <div>
-              <label for="board-title" class="mb-1.5 block text-b6 font-semibold tracking-wide text-light uppercase">
-                Suggestion form title
-              </label>
-              <input
-                id="board-title"
-                v-model="settings.title"
-                type="text"
-                maxlength="255"
-                placeholder="Suggest a feature"
-                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
-              />
-              <p class="mt-1 text-b6 text-light">Heading on the submission card merchants fill in.</p>
-            </div>
+          <CardContent>
+            <FieldGroup class="gap-5">
+              <Field>
+                <FieldLabel for="board-title">Suggestion form title</FieldLabel>
+                <Input
+                  id="board-title"
+                  :model-value="settings.title ?? ''"
+                  type="text"
+                  maxlength="255"
+                  placeholder="Suggest a feature"
+                  @update:model-value="(value: string | number) => setText('title', value)"
+                />
+                <FieldDescription>Heading on the submission card merchants fill in.</FieldDescription>
+              </Field>
 
-            <div>
-              <label for="board-intro" class="mb-1.5 block text-b6 font-semibold tracking-wide text-light uppercase">
-                Suggestion form intro
-              </label>
-              <textarea
-                id="board-intro"
-                v-model="settings.intro"
-                rows="2"
-                maxlength="2000"
-                placeholder="Tell us what would make this app work better for your store."
-                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
-              ></textarea>
-            </div>
+              <Field>
+                <FieldLabel for="board-intro">Suggestion form intro</FieldLabel>
+                <Textarea
+                  id="board-intro"
+                  :model-value="settings.intro ?? ''"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="Tell us what would make this app work better for your store."
+                  @update:model-value="(value: string | number) => setText('intro', value)"
+                />
+              </Field>
 
-            <div>
-              <span class="mb-2 block text-b6 font-semibold tracking-wide text-light uppercase">Roadmap columns</span>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="status in FEATURE_REQUEST_STATUSES"
-                  :key="status.value"
-                  class="rounded-full border px-3 py-1.5 text-b5 font-semibold transition"
-                  :class="isStatusVisible(status.value)
-                    ? 'border-primary bg-teal-light text-primary'
-                    : 'border-grey text-light hover:text-mid'"
-                  @click="toggleStatus(status.value)"
+              <FieldSet class="gap-3">
+                <FieldLegend variant="label">Roadmap columns</FieldLegend>
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
+                  size="sm"
+                  :spacing="2"
+                  class="flex-wrap"
+                  :model-value="visibleStatuses"
+                  @update:model-value="setVisibleStatuses"
                 >
-                  {{ status.label }}
-                </button>
-              </div>
-              <p class="mt-1.5 text-b6 text-light">Only the selected columns appear on the public roadmap.</p>
-            </div>
-          </div>
-        </section>
+                  <ToggleGroupItem
+                    v-for="status in FEATURE_REQUEST_STATUSES"
+                    :key="status.value"
+                    :value="status.value"
+                    class="data-[state=on]:border-primary/40 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                  >
+                    {{ status.label }}
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <FieldDescription>Only the selected columns appear on the public roadmap.</FieldDescription>
+              </FieldSet>
+            </FieldGroup>
+          </CardContent>
+        </Card>
 
-        <section class="rounded-lg border border-lighter bg-white p-5">
-          <h2 class="mb-4 text-h4 font-semibold text-dark">Behaviour</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle class="font-heading font-semibold">Behaviour</CardTitle>
+          </CardHeader>
 
-          <div class="space-y-3">
-            <label
-              v-for="toggle in TOGGLES"
-              :key="String(toggle.key)"
-              class="flex items-start gap-3"
-            >
-              <input
-                type="checkbox"
-                class="mt-1.5 h-4 w-4 accent-primary"
-                :checked="Boolean(settings[toggle.key])"
-                @change="(settings[toggle.key] as boolean) = ($event.target as HTMLInputElement).checked"
-              />
-              <span>
-                <span class="block text-b4 font-semibold text-dark">{{ toggle.label }}</span>
-                <span class="block text-b6 text-light">{{ toggle.hint }}</span>
-              </span>
-            </label>
+          <CardContent>
+            <FieldGroup class="gap-4">
+              <Field
+                v-for="toggle in TOGGLES"
+                :key="String(toggle.key)"
+                orientation="horizontal"
+              >
+                <Switch
+                  :id="`board-toggle-${String(toggle.key)}`"
+                  :model-value="Boolean(settings[toggle.key])"
+                  @update:model-value="(value: boolean) => setToggle(toggle.key, value)"
+                />
+                <FieldContent>
+                  <FieldLabel :for="`board-toggle-${String(toggle.key)}`">{{ toggle.label }}</FieldLabel>
+                  <FieldDescription>{{ toggle.hint }}</FieldDescription>
+                </FieldContent>
+              </Field>
 
-            <div class="flex items-center gap-3 pt-2">
-              <label for="limit" class="text-b4 text-mid">Requests per store per day</label>
-              <input
-                id="limit"
-                v-model.number="settings.submission_limit_per_day"
-                type="number"
-                min="0"
-                max="100"
-                class="w-20 rounded-sm border border-grey px-3 py-1.5 text-b4 tabular-nums focus:border-primary focus:outline-none"
-              />
-            </div>
-          </div>
-        </section>
+              <Field orientation="horizontal" class="pt-2">
+                <FieldLabel for="limit" class="font-normal">Requests per store per day</FieldLabel>
+                <Input
+                  id="limit"
+                  v-model.number="settings.submission_limit_per_day"
+                  type="number"
+                  min="0"
+                  max="100"
+                  class="w-20 tabular-nums"
+                />
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
 
-        <button
-          class="rounded-sm bg-primary px-5 py-2.5 text-b4 font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+        <Button
+          size="lg"
           :disabled="saving"
           @click="save"
         >
           Save settings
-        </button>
+        </Button>
       </div>
 
       <!-- credentials + embed -->
       <div class="space-y-5">
-        <section class="rounded-lg border border-lighter bg-white p-5">
-          <div class="mb-4">
-            <h2 class="text-h4 font-semibold text-dark">New request notifications</h2>
-            <p class="mt-0.5 text-b5 text-mid">
+        <Card>
+          <CardHeader>
+            <CardTitle class="font-heading font-semibold">New request notifications</CardTitle>
+            <CardDescription>
               Who on your team hears about it when a merchant submits a request. Separate
               several addresses with commas.
-            </p>
-          </div>
+            </CardDescription>
+          </CardHeader>
 
-          <div class="space-y-4">
-            <div v-for="field in RECIPIENT_FIELDS" :key="String(field.key)">
-              <label :for="`new-request-${field.key}`" class="mb-1.5 block text-b6 font-semibold tracking-wide text-light uppercase">
-                {{ field.label }}
-              </label>
-              <input
-                :id="`new-request-${field.key}`"
-                :value="settings[field.key] ?? ''"
-                type="text"
-                :placeholder="field.placeholder"
-                class="w-full rounded-sm border border-grey px-3 py-2 text-b4 focus:border-primary focus:outline-none"
-                @input="(settings[field.key] as string | null) = ($event.target as HTMLInputElement).value"
-              />
-              <p class="mt-1 text-b6 text-light">{{ field.hint }}</p>
-            </div>
+          <CardContent>
+            <FieldGroup class="gap-5">
+              <Field v-for="field in RECIPIENT_FIELDS" :key="String(field.key)">
+                <FieldLabel :for="`new-request-${field.key}`">{{ field.label }}</FieldLabel>
+                <Input
+                  :id="`new-request-${field.key}`"
+                  :model-value="settings[field.key] ?? ''"
+                  type="text"
+                  :placeholder="field.placeholder"
+                  @update:model-value="(value: string | number) => setText(field.key, value)"
+                />
+                <FieldDescription>{{ field.hint }}</FieldDescription>
+              </Field>
 
-            <p
-              v-if="!recipientCount && (settings.new_request_cc || settings.new_request_bcc)"
-              class="rounded-sm bg-warning-lighter px-3 py-2 text-b5 text-mid"
-            >
-              Nothing will be sent while <strong>To</strong> is empty - a cc or bcc on its own
-              is not enough.
-            </p>
-            <p v-else-if="!recipientCount" class="text-b5 text-light">
-              Notifications are off. Add an address to <strong>To</strong> to turn them on.
-            </p>
-            <p v-else class="text-b5 text-mid">
-              {{ recipientSummary }}
-            </p>
-          </div>
-        </section>
+              <AppAlert
+                v-if="!recipientCount && (settings.new_request_cc || settings.new_request_bcc)"
+                tone="warning"
+              >
+                Nothing will be sent while <strong>To</strong> is empty - a cc or bcc on its own
+                is not enough.
+              </AppAlert>
+              <p v-else-if="!recipientCount" class="text-[13px] text-muted-foreground">
+                Notifications are off. Add an address to <strong>To</strong> to turn them on.
+              </p>
+              <p v-else class="text-[13px] text-foreground">
+                {{ recipientSummary }}
+              </p>
+            </FieldGroup>
+          </CardContent>
+        </Card>
 
-        <section class="rounded-lg border border-lighter bg-white p-5">
-          <h2 class="mb-3 text-h4 font-semibold text-dark">Credentials</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle class="font-heading font-semibold">Credentials</CardTitle>
+          </CardHeader>
 
-          <div class="space-y-3">
-            <div>
-              <span class="mb-1 block text-b6 font-semibold tracking-wide text-light uppercase">Board URL</span>
+          <CardContent class="space-y-4">
+            <Field class="gap-1.5">
+              <FieldTitle>Board URL</FieldTitle>
               <div class="flex items-center gap-2">
-                <code class="flex-1 truncate rounded-sm bg-artboard px-2 py-1.5 text-b6 text-dark">{{ config.board_url }}</code>
-                <button class="text-b6 font-semibold text-primary" @click="copy(config.board_url ?? '', 'URL')">Copy</button>
+                <code class="flex-1 truncate rounded-lg bg-muted px-2 py-1.5 font-mono text-xs text-foreground">{{ config.board_url }}</code>
+                <Button variant="link" size="xs" class="h-auto p-0" @click="copy(config.board_url ?? '', 'URL')">Copy</Button>
               </div>
-            </div>
+            </Field>
 
-            <div>
-              <span class="mb-1 block text-b6 font-semibold tracking-wide text-light uppercase">Public key</span>
+            <Field class="gap-1.5">
+              <FieldTitle>Public key</FieldTitle>
               <div class="flex items-center gap-2">
-                <code class="flex-1 truncate rounded-sm bg-artboard px-2 py-1.5 text-b6 text-dark">{{ config.board_public_key }}</code>
-                <button class="text-b6 font-semibold text-primary" @click="copy(config.board_public_key ?? '', 'Key')">Copy</button>
+                <code class="flex-1 truncate rounded-lg bg-muted px-2 py-1.5 font-mono text-xs text-foreground">{{ config.board_public_key }}</code>
+                <Button variant="link" size="xs" class="h-auto p-0" @click="copy(config.board_public_key ?? '', 'Key')">Copy</Button>
               </div>
-            </div>
+            </Field>
 
-            <div>
-              <span class="mb-1 block text-b6 font-semibold tracking-wide text-light uppercase">Signing secret</span>
-              <div v-if="revealedSecret" class="rounded-sm border border-warning bg-yellow-50 p-2">
-                <code class="block break-all text-b6 text-dark">{{ revealedSecret }}</code>
-                <p class="mt-1 text-b6 text-mid">Copy it now — it is not shown again.</p>
-                <button class="mt-1 text-b6 font-semibold text-primary" @click="copy(revealedSecret, 'Secret')">Copy</button>
+            <Field class="gap-1.5">
+              <FieldTitle>Signing secret</FieldTitle>
+              <AppAlert v-if="revealedSecret" tone="warning" title="Copy it now — it is not shown again.">
+                <code class="mt-1 block break-all rounded-lg bg-muted px-2 py-1.5 font-mono text-xs text-foreground">{{ revealedSecret }}</code>
+                <template #action>
+                  <Button variant="link" size="xs" class="h-auto p-0" @click="copy(revealedSecret, 'Secret')">Copy</Button>
+                </template>
+              </AppAlert>
+              <FieldDescription v-else class="text-xs">Hidden. Rotate to reveal a new one.</FieldDescription>
+              <div>
+                <Button variant="destructive" size="sm" class="mt-1" @click="rotateSecret">
+                  Rotate secret
+                </Button>
               </div>
-              <p v-else class="text-b6 text-light">Hidden. Rotate to reveal a new one.</p>
-              <button class="mt-2 rounded-sm border border-grey px-3 py-1.5 text-b6 font-semibold text-mid hover:border-error hover:text-error" @click="rotateSecret">
-                Rotate secret
-              </button>
-            </div>
-          </div>
-        </section>
+            </Field>
+          </CardContent>
+        </Card>
 
-        <section class="rounded-lg border border-lighter bg-white p-5">
-          <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-h4 font-semibold text-dark">Embed</h2>
-            <button class="text-b6 font-semibold text-primary" @click="copy(embedSnippet, 'Snippet')">Copy</button>
-          </div>
-          <pre class="custom-scrollbar max-h-96 overflow-auto rounded-sm bg-artboard p-3 text-b6 leading-relaxed text-mid"><code>{{ embedSnippet }}</code></pre>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle class="font-heading font-semibold">Embed</CardTitle>
+            <CardAction>
+              <Button variant="link" size="xs" class="h-auto p-0" @click="copy(embedSnippet, 'Snippet')">Copy</Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <pre class="custom-scrollbar max-h-96 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs leading-relaxed text-foreground"><code>{{ embedSnippet }}</code></pre>
+          </CardContent>
+        </Card>
       </div>
     </div>
   </div>

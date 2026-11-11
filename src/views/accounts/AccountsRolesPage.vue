@@ -2,10 +2,19 @@
 import { ref, onMounted } from 'vue';
 import { aclService, type Role, type Permission } from '@/services/aclService';
 import { useAuthStore } from '@/stores/auth';
-import { EditIcon, DeleteIcon, PlusIcon, CloseIcon, LoadingIcon } from '@/components/icons';
+import { Plus, Pencil, Trash2, ShieldCheck } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import PageHeader from '@/components/common/PageHeader.vue';
-import Swal from 'sweetalert2';
-import { Toast } from '@/utils/toast';
+import PermissionChecklist from '@/components/common/PermissionChecklist.vue';
+import { toast } from '@/utils/toast';
+import { confirmDialog } from '@/utils/confirm';
+import { errorMessage } from '@/utils/errors';
 
 const roles = ref<Role[]>([]);
 const permissionsList = ref<Permission[]>([]);
@@ -21,6 +30,7 @@ const currentRole = ref<{ id?: number, name: string, description: string, permis
   permission_ids: []
 });
 
+// Permission picker groups, keyed by the slug's module prefix (users.edit -> users).
 const fetchRoles = async () => {
   loading.value = true;
   try {
@@ -89,52 +99,38 @@ const saveRole = async () => {
     }
 
     if (response.success) {
-      Toast.fire({
-        icon: 'success',
-        title: response.message
-      });
+      toast.success(response.message || 'Role saved');
       showModal.value = false;
       fetchRoles();
     }
-  } catch (error: any) {
-    Swal.fire('Error', error.response?.data?.message || 'Failed to save role', 'error');
+  } catch (error) {
+    toast.error('Error', { description: errorMessage(error, 'Failed to save role') });
   } finally {
     isSaving.value = false;
   }
 };
 
 const deleteRole = async (id: number) => {
-  const result = await Swal.fire({
+  const { confirmed } = await confirmDialog({
     title: 'Are you sure?',
-    text: "This will remove the role from all users assigned to it!",
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#d33',
-    cancelButtonColor: '#6B7280',
-    confirmButtonText: 'Yes, delete it!'
+    description: "This will remove the role from all users assigned to it!",
+    confirmText: 'Yes, delete it!',
+    destructive: true
   });
 
-  if (result.isConfirmed) {
-    Swal.fire({
-      title: 'Deleting...',
-      text: 'Please wait while we delete the role',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+  if (confirmed) {
+    const loadingId = toast.loading('Deleting...', { description: 'Please wait while we delete the role' });
 
     try {
-      const response = await aclService.deleteRole(id) as any;
+      const response = await aclService.deleteRole(id);
       if (response.success) {
-        Toast.fire({
-          icon: 'success',
-          title: response.message
-        });
+        toast.success(response.message, { id: loadingId, description: undefined });
         fetchRoles();
+      } else {
+        toast.dismiss(loadingId);
       }
-    } catch (error) {
-      Swal.fire('Error', 'Failed to delete role', 'error');
+    } catch {
+      toast.error('Error', { id: loadingId, description: 'Failed to delete role' });
     }
   }
 };
@@ -147,111 +143,99 @@ const deleteRole = async (id: number) => {
       description="Manage user roles and their associated permissions"
     >
       <template #actions>
-        <button 
+        <Button
           v-if="authStore.hasPermission('roles.add')"
-          @click="openAddModal" 
-          class="bg-teal text-white px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+          @click="openAddModal"
         >
-          <PlusIcon size="sm" />
+          <Plus />
           Add Role
-        </button>
+        </Button>
       </template>
     </PageHeader>
 
-    <div v-if="loading" class="text-center py-12 text-gray-500">Loading roles...</div>
+    <div v-if="loading" class="text-center py-12 text-muted-foreground">Loading roles...</div>
     
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-      <div
-        v-for="role in roles"
-        :key="role.id"
-        class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all"
-      >
-        <div class="flex items-start justify-between mb-4">
-          <h3 class="text-lg font-bold text-dark">{{ role.name }}</h3>
-          <div class="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600 font-mono">{{ role.slug }}</div>
-        </div>
-        <p class="text-sm text-gray-500 mb-6 h-10 overflow-hidden line-clamp-2">{{ role.description || 'No description provided' }}</p>
-        
-        <div class="flex items-center text-sm text-gray-600 mb-6">
-          <svg class="w-4 h-4 mr-2 text-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          {{ role.permissions?.length || 0 }} Permissions assigned
-        </div>
+      <Card v-for="role in roles" :key="role.id">
+        <CardHeader>
+          <div class="flex items-start justify-between gap-2">
+            <CardTitle class="text-lg font-semibold">{{ role.name }}</CardTitle>
+            <Badge variant="secondary" class="font-mono">{{ role.slug }}</Badge>
+          </div>
+          <CardDescription class="h-10 overflow-hidden line-clamp-2">{{ role.description || 'No description provided' }}</CardDescription>
+        </CardHeader>
 
-        <div class="flex space-x-2">
-          <button 
+        <CardContent class="flex items-center text-sm text-muted-foreground">
+          <ShieldCheck class="size-4 mr-2 text-primary" />
+          {{ role.permissions?.length || 0 }} Permissions assigned
+        </CardContent>
+
+        <CardFooter class="gap-2">
+          <Button
             v-if="authStore.hasPermission('roles.edit')"
-            @click="openEditModal(role)" 
-            class="flex items-center justify-center gap-2 flex-1 px-4 py-2 border border-teal text-teal rounded-lg font-medium hover:bg-teal hover:text-white transition-colors"
+            variant="outline"
+            class="flex-1"
+            @click="openEditModal(role)"
           >
-            <EditIcon />
+            <Pencil />
             Edit Role
-          </button>
-          <button 
+          </Button>
+          <Button
             v-if="authStore.hasPermission('roles.edit')"
-            @click="deleteRole(role.id)" 
-            class="flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-lg font-medium hover:bg-red-500 hover:text-white transition-colors"
+            variant="destructive"
+            size="icon"
+            aria-label="Delete role"
+            @click="deleteRole(role.id)"
           >
-            <DeleteIcon />
-          </button>
-        </div>
-      </div>
+            <Trash2 />
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
 
     <!-- Role Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
-      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showModal = false"></div>
+    <Dialog v-model:open="showModal">
+      <DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-8">
+        <DialogHeader>
+          <DialogTitle>{{ isEditing ? 'Edit Role' : 'Create New Role' }}</DialogTitle>
+        </DialogHeader>
 
-      <div class="relative bg-white rounded-xl shadow-2xl transform transition-all max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-100/50">
-          <h3 class="text-lg font-bold text-gray-900">{{ isEditing ? 'Edit Role' : 'Create New Role' }}</h3>
-          <button @click="showModal = false" class="text-gray-400 hover:text-gray-600">
-            <CloseIcon size="lg" />
-          </button>
-        </div>
+        <form id="roleForm" @submit.prevent="saveRole" class="space-y-8">
+          <FieldGroup class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Field>
+              <FieldLabel for="roleName">Role Name</FieldLabel>
+              <Input id="roleName" name="name" v-model="currentRole.name" type="text" required placeholder="e.g. Compliance Manager" />
+            </Field>
+            <Field>
+              <FieldLabel for="roleDescription">Description</FieldLabel>
+              <Input id="roleDescription" name="description" v-model="currentRole.description" type="text" placeholder="Short description of this role" />
+            </Field>
+          </FieldGroup>
 
-        <div class="p-6 overflow-y-auto flex-1">
-          <form id="roleForm" @submit.prevent="saveRole">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <label for="roleName" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Role Name</label>
-                <input id="roleName" name="name" v-model="currentRole.name" type="text" required placeholder="e.g. Compliance Manager" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
-              </div>
-              <div>
-                <label for="roleDescription" class="block text-sm font-medium text-gray-700 mb-1 cursor-pointer">Description</label>
-                <input id="roleDescription" name="description" v-model="currentRole.description" type="text" placeholder="Short description of this role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal focus:border-teal">
-              </div>
-            </div>
+          <FieldSet class="gap-4">
+            <PermissionChecklist
+              v-model="currentRole.permission_ids"
+              :permissions="permissionsList"
+              select-all
+              id-prefix="role-perm"
+              class="sm:grid-cols-2"
+            />
+          </FieldSet>
 
-            <div class="mb-2">
-              <label class="block text-sm font-medium text-gray-700 mb-3">Assign Permissions</label>
-              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                <div v-for="permission in permissionsList" :key="permission.id" class="flex items-center p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
-                  <input type="checkbox" :id="'p-'+permission.id" :value="permission.id" v-model="currentRole.permission_ids" class="rounded text-teal focus:ring-teal h-4 w-4">
-                  <label :for="'p-'+permission.id" class="ml-3 text-sm text-gray-600 cursor-pointer select-none">
-                    <div class="font-medium text-dark">{{ permission.name }}</div>
-                    <div class="text-xs text-gray-400">{{ permission.slug }}</div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        <div class="p-6 border-t border-gray-100 flex gap-3">
-          <button type="button" @click="showModal = false" class="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg transition-all font-medium hover:bg-gray-50">Cancel</button>
-          <button 
-            type="submit" 
-            form="roleForm" 
-            :disabled="isSaving || !currentRole.name"
-            class="flex-1 px-4 py-2.5 bg-teal text-white rounded-lg font-medium hover:shadow-lg hover:shadow-teal/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            <LoadingIcon v-if="isSaving" size="xs" />
-            {{ isSaving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Role' : 'Create Role') }}
-          </button>
-        </div>
-      </div>
-    </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" size="lg" class="flex-1" @click="showModal = false">Cancel</Button>
+            <Button
+              type="submit"
+              size="lg"
+              :disabled="isSaving || !currentRole.name"
+              class="flex-1"
+            >
+              <Spinner v-if="isSaving" />
+              {{ isSaving ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Role' : 'Create Role') }}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

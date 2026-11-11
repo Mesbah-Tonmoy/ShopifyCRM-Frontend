@@ -1,7 +1,7 @@
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'https://crm.zapioapps.com/backendapp';
 const API_URL = `${BASE_URL}/api`;
 
-interface ApiResponse<T> {
+export interface ApiResponse<T> {
   success: boolean;
   message?: string;
   data: T;
