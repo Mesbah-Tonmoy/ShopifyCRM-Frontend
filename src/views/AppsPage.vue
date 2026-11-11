@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAppsStore } from '@/stores/apps';
 import { useAuthStore } from '@/stores/auth';
 import { ShopifyIcon } from '@/components/icons';
-import { Plus, Trash2, ChevronRight, RefreshCw, LayoutGrid, Package, Link } from '@lucide/vue';
+import { Plus, Trash2, ChevronRight, RefreshCw, Blocks, Package, Link } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -212,10 +212,10 @@ const handleDelete = async (id: number) => {
                   <img :src="app.icon" :alt="app.app_name" class="w-full h-full object-cover" />
                 </div>
                 <div v-else class="size-14 rounded-xl bg-muted flex items-center justify-center text-foreground flex-shrink-0">
-                  <LayoutGrid class="size-7" />
+                  <Blocks class="size-7" />
                 </div>
                 <div class="min-w-0 cursor-pointer" @click="viewAppDetails(app.id)">
-                  <h3 class="font-heading text-lg font-semibold text-foreground truncate transition-colors group-hover:text-primary">
+                  <h3 class="font-heading text-lg font-semibold text-foreground truncate transition-colors hover:text-primary">
                     {{ app.app_name }}
                   </h3>
                   <div class="flex items-center mt-1 space-x-2">

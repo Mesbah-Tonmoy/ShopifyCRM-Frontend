@@ -2,13 +2,13 @@
 import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, type RouteLocationRaw } from 'vue-router';
 import {
+  Blocks,
   Building2,
   ChevronRight,
   CircleDollarSign,
   FolderOpen,
   Layers,
   LayoutDashboard,
-  LayoutGrid,
   Mail,
   MessageSquareText,
   Server,
@@ -62,7 +62,7 @@ const link = (title: string, name: string, permission?: string): NavLink => ({
 const navigation = computed<NavItem[]>(() => {
   const items: NavItem[] = [
     { ...link('Dashboard', 'dashboard'), icon: LayoutDashboard },
-    { ...link('Apps', 'apps', 'apps.view'), icon: LayoutGrid },
+    { ...link('Apps', 'apps', 'apps.view'), icon: Blocks },
     { ...link('Email Templates', 'email-templates', 'email_templates.view'), icon: Mail },
     { ...link("What's New", 'features', 'features.view'), icon: Sparkles },
     { ...link('Pricing Plan', 'pricing-plan', 'pricing_plans.view'), icon: CircleDollarSign },
